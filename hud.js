@@ -94,7 +94,7 @@
     if (e.pointerType) lastType = e.pointerType === 'mouse' ? 'mouse' : 'touch';
     if (U.screen === 'results' || U.paused || (G && G.over)) {
       if (kind === 'down') U.setPressed(U.findBtn(x, y));
-      else if (kind === 'up') { const b = U.pressedBtn(); U.setPressed(null); if (b && U.findBtn(x, y) === b && b.fn) { WB.snd.play('click'); b.fn(); } }
+      else if (kind === 'up') { const b = U.pressedBtn(); U.setPressed(null); const cur = U.findBtn(x, y); if (b && cur && U.sameBtn(b, cur) && cur.fn) { WB.snd.play('click'); cur.fn(); } }
       return;
     }
     const id = e.pointerId;
@@ -108,7 +108,7 @@
       const s = sticks.move && sticks.move.id === id ? sticks.move : sticks.aim && sticks.aim.id === id ? sticks.aim : null;
       if (s) { s.x = x; s.y = y; }
     } else if (kind === 'up') {
-      const b = U.pressedBtn(); if (b && !b.instant) { U.setPressed(null); if (U.findBtn(x, y) === b && b.fn) { WB.snd.play('click'); b.fn(); } }
+      const b = U.pressedBtn(); if (b && !b.instant) { U.setPressed(null); const cur = U.findBtn(x, y); if (cur && U.sameBtn(b, cur) && cur.fn) { WB.snd.play('click'); cur.fn(); } }
       if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
       if (sticks.aim && sticks.aim.id === id) {
         const s = sticks.aim, dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), m = clamp(d / 70, 0, 1);

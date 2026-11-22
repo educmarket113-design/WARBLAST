@@ -5,6 +5,9 @@
   let cv, ctx, btns = [], pressed = null, hover = null, mouseX = -1, mouseY = -1;
   const sel = { mode: 'solo', arena: 'nature' };
   U.sel = sel;
+  // Les boutons sont recréés à chaque image : on les compare par position, pas par identité d'objet.
+  // (Sinon un appui qui dure plus d'une image, donc tout appui réel au doigt, ne déclenche rien.)
+  U.sameBtn = function (a, b) { return !!a && !!b && a.id === b.id && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && a.w === b.w && a.h === b.h; };
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
   // ---------- initialisation ----------
@@ -60,7 +63,7 @@
   function button(x, y, w, h, o) {
     const id = btns.length; const b = { x: x, y: y, w: w, h: h, fn: o.fn, id: id, off: !!o.off, snd: o.snd, instant: !!o.instant, tag: o.tag };
     btns.push(b); if (o.hidden) return b;
-    const st = STYLES[o.style || 'blue'], isP = pressed === b, isH = hover === b && !isP, off = o.off;
+    const st = STYLES[o.style || 'blue'], isP = U.sameBtn(pressed, b), isH = U.sameBtn(hover, b) && !isP, off = o.off;
     const dy = isP ? 3 : 0;
     ctx.save(); ctx.translate(0, dy);
     rr(ctx, x, y + 5, w, h, h * 0.28 > 16 ? 16 : h * 0.28); ctx.fillStyle = off ? '#1d2238' : st[2]; ctx.fill();
@@ -371,7 +374,7 @@
     if (U.H > U.W * 1.05) { if (kind === 'down') { U.resize(); U.tryLandscape(); } return; }
     if (U.screen === 'game' || U.screen === 'results') { U.gamePointer(kind, e, px, py, x, y); return; }
     if (kind === 'down') { pressed = findBtn(x, y); if (U.screen === 'title' && !pressed) { WB.snd.unlock(); U.tryLandscape(); U.go('menu'); } }
-    else if (kind === 'up') { const b = pressed; pressed = null; if (b && findBtn(x, y) === b && b.fn) { if (b.snd !== false) WB.snd.play('click'); b.fn(); } }
+    else if (kind === 'up') { const b = pressed; pressed = null; const cur = findBtn(x, y); if (b && cur && U.sameBtn(b, cur) && cur.fn) { if (cur.snd !== false) WB.snd.play('click'); cur.fn(); } }
   }
   U.pressedBtn = function () { return pressed; };
   U.setPressed = function (b) { pressed = b; };
