@@ -11,9 +11,10 @@
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
   // ---------- initialisation ----------
+  U.applyAudio = function (s) { s = s || U.save; WB.snd.setEnabled(s.sound !== false); WB.snd.setSfxVolume(s.sfxVol == null ? 1 : s.sfxVol); WB.snd.setMusic(s.music !== false, s.musVol == null ? 0.6 : s.musVol); };
   U.init = function (canvas, save) {
     cv = U.cv = canvas; ctx = U.ctx = canvas.getContext('2d'); U.save = save;
-    WB.snd.setEnabled(save.sound !== false);
+    WB.snd.setEnabled(save.sound !== false); U.applyAudio(save);
     U.resize();
     // L'orientation d'un téléphone change parfois sans événement fiable ou avec des valeurs périmées :
     // on écoute tous les signaux possibles et on revérifie à chaque image (voir U.frame).
@@ -27,6 +28,11 @@
     cv.addEventListener('pointermove', function (e) { e.preventDefault(); onPointer('move', e); });
     cv.addEventListener('pointerup', function (e) { e.preventDefault(); onPointer('up', e); });
     cv.addEventListener('pointercancel', function (e) { onPointer('up', e); });
+    cv.addEventListener('lostpointercapture', function (e) { if (U.releasePointer) U.releasePointer(e.pointerId); });
+    window.addEventListener('pointerup', function (e) { if (U.releasePointer) U.releasePointer(e.pointerId); });
+    window.addEventListener('pointercancel', function (e) { if (U.releasePointer) U.releasePointer(e.pointerId); });
+    window.addEventListener('blur', function () { if (U.resetSticks) U.resetSticks(); });
+    window.addEventListener('orientationchange', function () { if (U.resetSticks) U.resetSticks(); });
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   };
   U.resize = function () {
@@ -62,7 +68,7 @@
     setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 60);
   };
   U.commit = function () { WB.sdk.save(U.save); };
-  U.go = function (s) { U.screen = s; U.t = 0; btns = []; pressed = null; };
+  U.go = function (s) { U.screen = s; U.t = 0; btns = []; pressed = null; WB.snd.music(s === 'game' ? 'battle' : 'menu'); if (U.resetSticks) U.resetSticks(); };
   U.showToast = function (txt, col) { U.toast = { txt: txt, t: 2.2, col: col || '#fff' }; };
 
   // ---------- dessin de base ----------
@@ -108,7 +114,34 @@
 
   // ---------- fond animé des menus ----------
   const bgItems = [];
-  function bg(time) {
+  // ----- fond d'accueil : une vraie partie sur une arène, image renouvelée chaque minute -----
+  const TBG = { img: null, key: -1 };
+  function makeTitleBg(arena) {
+    const saved = WB.G, soundOn = WB.snd.on; let c = null;
+    try {
+      WB.snd.setEnabled(false);
+      WB.startMatch({ arena: arena, mode: 't5', name: U.save.name, spec: Object.assign({}, U.save.spec), playerLevel: 4, ranked: false, duration: 240 });
+      const G = WB.G; G.started = true; G.countdown = 0;
+      for (let i = 0; i < 780; i++) G.update(1 / 60);
+      c = document.createElement('canvas'); c.width = 960; c.height = 540; const g = c.getContext('2d');
+      for (let k = 0; k < 12; k++) { g.setTransform(1, 0, 0, 1, 0, 0); WB.renderWorld(g, 960, 540, G, 5 + k * 0.05); }
+    } catch (e) { c = null; }
+    WB.G = saved; WB.snd.setEnabled(soundOn); return c;
+  }
+  U.ensureTitleBg = function () {
+    const ids = WB.ARENAS.map(function (a) { return a.id; }), k = Math.floor(Date.now() / 60000);
+    if (TBG.key === k && TBG.img) return; if (TBG.busy) return; TBG.busy = true; TBG.key = k;
+    const img = makeTitleBg(ids[k % ids.length]); if (img) TBG.img = img; TBG.busy = false;
+  };
+  function photoBg(time) {
+    const W = U.VW, H = U.VH, im = TBG.img; if (!im) return false;
+    const sc = Math.max(W / 960, H / 540), w = 960 * sc, h = 540 * sc; ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h);
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, 'rgba(6,10,30,.55)'); g.addColorStop(0.5, 'rgba(6,10,30,.38)'); g.addColorStop(1, 'rgba(6,10,30,.7)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.3, W / 2, H / 2, H * 0.95); v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,10,.5)'); ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+    return true;
+  }
+  function bg(time, photo) {
+    if (photo) { U.ensureTitleBg(); if (photoBg(time)) return; }
     const W = U.VW, H = U.VH, g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1d2a5e'); g.addColorStop(1, '#0b1026'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = 'rgba(255,255,255,.035)'; const T = 48, off = (time * 10) % (T * 2);
     for (let y = -T * 2; y < H + T; y += T) for (let x = -T * 2; x < W + T; x += T) if (((x / T + y / T) & 1) === 0) ctx.fillRect(x + off, y + off * 0.5, T, T);
@@ -141,7 +174,7 @@
   const screens = {};
 
   screens.title = function (time) {
-    const W = U.VW, H = U.VH; bg(time);
+    const W = U.VW, H = U.VH; bg(time, true);
     // personnages qui sautillent
     for (let i = 0; i < 10; i++) {
       const sp = { char: i, color: (i * 3 + 1) % 15, cape: i % 2 ? 'c_red' : 'none', armor: 'none', hat: i % 3 === 0 ? 'h_party' : 'none', scarf: i % 4 === 1 ? 's_red' : 'none', shoes: 'none' };
@@ -173,7 +206,7 @@
   U.resBar = resBar;
 
   screens.menu = function (time) {
-    const W = U.VW, H = U.VH; bg(time); topBar(null, null);
+    const W = U.VW, H = U.VH; bg(time, true); topBar(null, null);
     const s = U.save, sp = specOf(), lv = charLv(sp.char);
     text(s.name, 16, 24, 22, '#fff', 'left', 4); text('Modifier mon nom', 16, 43, 11, 'rgba(190,210,255,.75)', 'left', 2);
     button(8, 4, 230, 48, { hidden: true, fn: function () { U.editName(); } });
@@ -308,14 +341,14 @@
         text(a.name, cx, cy + 46, 22, '#fff', 'center', 5); text(a.desc, cx, cy + 68, 12, '#cfe0ff', 'center', 3);
       } });
     });
-    if (fr) {
-      panel(X0 + 20, 392, 820, 58, { r: 12 });
-      text('Salon ' + U.friend.code, X0 + 40, 414, 22, '#ffd24a', 'left', 4);
-      text('Le jeu en ligne entre amis demande un serveur, absent de cette version. Pour l\'instant la partie se joue contre des bots.', X0 + 40, 436, 13, '#cfe0ff', 'left', 3);
-    } else {
-      const lv = charLv(U.save.spec.char);
-      panel(X0 + 20, 392, 820, 46, { r: 12 }); text('Ton niveau est ' + lv + ' (le même pour tous tes personnages). Tu as ' + WB.slotCount(lv) + ' case' + (lv > 1 ? 's' : '') + ' de capacité. Les trophées servent à monter de niveau.', X0 + 430, 415, 14, '#cfe0ff', 'center', 3);
-    }
+    // durée de la partie : 3, 4 ou 5 minutes au choix du joueur
+    text('Durée', X0 + 150, 410, 20, '#cfe0ff', 'center', 4);
+    [180, 240, 300].forEach(function (d, i) {
+      const on = (U.save.duration || 240) === d;
+      button(X0 + 250 + i * 190, 388, 170, 44, { label: (d / 60) + ' min', style: on ? 'green' : 'dark', sel: on, size: 22, fn: function () { U.save.duration = d; U.commit(); WB.snd.play('click'); } });
+    });
+    if (fr) text('Salon ' + U.friend.code + '. Le jeu en ligne demande un serveur, absent de cette version : la partie se joue contre des bots.', X0 + 430, H - 100, 12.5, '#cfe0ff', 'center', 3);
+    else text('Ton niveau est ' + charLv() + ' (le même pour tous tes personnages) : ' + WB.slotCount(charLv()) + ' case' + (charLv() > 1 ? 's' : '') + ' de capacité.', X0 + 430, H - 100, 12.5, '#cfe0ff', 'center', 3);
     button(W / 2 - 200, H - 86, 400, 64, { label: 'LANCER LA PARTIE', style: 'red', size: 30, fn: function () { U.startGame(); } });
     drawToast();
   };
@@ -323,19 +356,31 @@
   U.startGame = function () {
     const s = U.save, sp = specOf();
     WB.snd.unlock(); WB.input.reset();
-    WB.startMatch({ arena: sel.arena, mode: sel.mode, name: s.name, spec: sp, playerLevel: charLv(sp.char), ranked: U.playType === 'world' });
+    WB.startMatch({ arena: sel.arena, mode: sel.mode, name: s.name, spec: sp, playerLevel: charLv(sp.char), ranked: U.playType === 'world', duration: s.duration || 240 });
     U.matchCfg = { arena: sel.arena, mode: sel.mode }; U.rewardDone = false; U.doubled = false; U.paused = false; U.chainMode = false; U.chainSel = [];
     U.buildMini(); U.go('game'); WB.sdk.hideBanner();
   };
 
   // ----- réglages et aide -----
   screens.settings = function (time) {
-    const W = U.VW; bg(time); topBar('Réglages', 'menu');
+    const W = U.VW, X0 = (W - 860) / 2; bg(time); topBar('Réglages', 'menu');
     const s = U.save;
-    button(W / 2 - 160, 90, 320, 60, { label: s.sound ? 'Son activé' : 'Son coupé', style: s.sound ? 'green' : 'gray', size: 22, fn: function () { s.sound = !s.sound; WB.snd.setEnabled(s.sound); U.commit(); WB.snd.play('click'); } });
-    button(W / 2 - 160, 166, 320, 60, { label: 'Modifier mon nom', sub: s.name, style: 'blue', size: 20, fn: function () { U.editName(); } });
-    button(W / 2 - 160, 242, 320, 60, { label: 'Comment jouer', style: 'gray', size: 22, fn: function () { U.go('help'); } });
-    text('Warblast 1.0', W / 2, 340, 16, 'rgba(210,225,255,.6)', 'center', 3);
+    function pips(x, y, v) { for (let i = 0; i < 5; i++) { ctx.fillStyle = (i + 1) / 5 <= v + 0.01 ? '#7dff9a' : 'rgba(255,255,255,.18)'; U.rr(ctx, x + i * 20, y - (6 + i * 3), 14, 6 + i * 3 + 6, 3); ctx.fill(); } }
+    function audioRow(y, label, icon, onKey, volKey, apply) {
+      panel(X0 + 80, y, 700, 70, { r: 16 }); WB.drawIcon(ctx, icon, X0 + 120, y + 35, 34); text(label, X0 + 150, y + 35, 22, '#fff', 'left', 4);
+      button(X0 + 360, y + 11, 130, 48, { label: s[onKey] ? 'Activé' : 'Coupé', style: s[onKey] ? 'green' : 'gray', size: 19, fn: function () { s[onKey] = !s[onKey]; apply(); U.commit(); WB.snd.play('click'); } });
+      const v = s[volKey]; const stepV = function (d) { s[volKey] = Math.max(0, Math.min(1, Math.round((v + d) * 5) / 5)); apply(); U.commit(); WB.snd.play('click'); };
+      button(X0 + 520, y + 13, 44, 44, { label: '-', style: 'dark', size: 26, fn: function () { stepV(-0.2); } });
+      pips(X0 + 578, y + 44, v);
+      button(X0 + 690, y + 13, 44, 44, { label: '+', style: 'dark', size: 26, fn: function () { stepV(0.2); } });
+    }
+    audioRow(76, 'Effets sonores', 'bomb', 'sound', 'sfxVol', function () { U.applyAudio(); });
+    audioRow(158, 'Musique', 'bolt', 'music', 'musVol', function () { U.applyAudio(); });
+    panel(X0 + 80, 240, 700, 70, { r: 16 }); text('Pseudo', X0 + 120, 275, 22, '#fff', 'left', 4);
+    button(X0 + 330, 251, 420, 48, { label: s.name, sub: 'Modifier mon nom', style: 'blue', size: 18, fn: function () { U.editName(); } });
+    panel(X0 + 80, 322, 700, 70, { r: 16 }); text('Aide', X0 + 120, 357, 22, '#fff', 'left', 4);
+    button(X0 + 330, 333, 420, 48, { label: 'Comment jouer', style: 'gray', size: 20, fn: function () { U.go('help'); } });
+    text('Warblast 1.0', W / 2, 424, 15, 'rgba(210,225,255,.55)', 'center', 3);
   };
   const HELP = [
     ['joystick', 'Stick gauche : se déplacer. Stick droit : viser. En le relâchant tu lances une bombe.'],
@@ -404,7 +449,7 @@
     if (e.pointerType === 'touch') WB.input.touch = true;
     if (e.pointerType === 'mouse') { mouseX = x; mouseY = y; U.mousePx = px; U.mousePy = py; }
     if (kind === 'down') WB.snd.unlock();
-    if (U.H > U.W * 1.05) { if (kind === 'down') { U.resize(); U.tryLandscape(); } return; }
+    if (U.H > U.W * 1.05) { if (kind === 'down') { U.resize(); U.tryLandscape(); } else if (U.resetSticks) U.resetSticks(); return; }
     if (U.screen === 'game' || U.screen === 'results') { U.gamePointer(kind, e, px, py, x, y); return; }
     if (kind === 'down') { pressed = findBtn(x, y); if (U.screen === 'title' && !pressed) { WB.snd.unlock(); U.tryLandscape(); U.go('menu'); } }
     else if (kind === 'up') { const b = pressed; pressed = null; const cur = findBtn(x, y); if (b && cur && U.sameBtn(b, cur) && cur.fn) { if (cur.snd !== false) WB.snd.play('click'); cur.fn(); } }

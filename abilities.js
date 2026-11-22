@@ -22,13 +22,39 @@
 
   def('fire', {
     name: 'Feu', col: '#ff7a1c', type: 'aim', cd: L => 3.2 - 0.15 * L, range: L => 420,
-    desc: 'Boules de feu : brûlure qui s\'atténue avec le temps.',
+    desc: 'Niveau 1 : une boule de feu. Niveau 2 : deux boules. Niveau 3 : un rayon de feu. Niveau 4 : deux rayons. Niveau 5 : tourbillon de flammes à 360° autour de toi.',
     cast(f, ab, aim) {
-      const g = G(), L = ab.lvl, n = L >= 5 ? 3 : L >= 3 ? 2 : 1, base = Math.atan2(aim.y, aim.x);
-      for (let i = 0; i < n; i++) {
-        const a = base + (i - (n - 1) / 2) * 0.2;
-        g.proj({ x: f.x, y: f.y, dx: Math.cos(a), dy: Math.sin(a), speed: 560, life: 0.78, r: 13, owner: f, ab: 'fire', lvl: L, kind: 'fire',
-          onHit(p, t) { g.damage(t, 10 + 3 * L, f, 'fire'); g.burn(t, 16 + 7 * L, 4, f, 'fire'); g.fx('burst', p.x, p.y, { col: '#ff9a3c', n: 10, life: 0.4 }); return true; } });
+      const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x);
+      if (L <= 2) {
+        for (let i = 0; i < L; i++) {
+          const a = base + (i - (L - 1) / 2) * 0.22;
+          g.proj({ x: f.x, y: f.y, dx: Math.cos(a), dy: Math.sin(a), speed: 560, life: 0.78, r: 13, owner: f, ab: 'fire', lvl: L, kind: 'fire',
+            onHit(p, t) { g.damage(t, 10 + 3 * L, f, 'fire'); g.burn(t, 16 + 7 * L, 4, f, 'fire'); g.fx('burst', p.x, p.y, { col: '#ff9a3c', n: 10, life: 0.4 }); return true; } });
+        }
+      } else if (L <= 4) {
+        // rayons de feu : le rayon s'arrête sur les murs et brûle tout ce qu'il traverse pendant 0.6 s
+        const nb = L - 2, LEN = 330;
+        for (let i = 0; i < nb; i++) {
+          const a = base + (i - (nb - 1) / 2) * 0.38, dx = Math.cos(a), dy = Math.sin(a);
+          for (let k = 0; k < 4; k++) g.later(k * 0.18, () => {
+            if (!f.alive) return;
+            let len = LEN; for (let d = 20; d <= LEN; d += 12) { if (g.world.solidAt(f.x + dx * d, f.y + dy * d)) { len = d; break; } }
+            const ex = f.x + dx * len, ey = f.y + dy * len; g.fx('beam', f.x, f.y, { x2: ex, y2: ey, life: 0.26, col: '#ff7a1c', w: 20 });
+            for (const t of g.enemiesIn(f, f.x + dx * len / 2, f.y + dy * len / 2, len / 2 + 30)) {
+              const px = t.x - f.x, py = t.y - f.y, along = px * dx + py * dy, side = Math.abs(px * dy - py * dx);
+              if (along > 0 && along < len + t.r && side < 30 + t.r * 0.6) { g.damage(t, 7 + 2 * L, f, 'fire'); if (k === 0) g.burn(t, 14 + 6 * L, 3.5, f, 'fire'); }
+            }
+          });
+        }
+        g.shake(2);
+      } else {
+        // tourbillon de flammes à 360° qui suit le lanceur
+        const R = 150, T = 2.4; g.fx('whirl', f.x, f.y, { f: f, r: R, life: T, col: '#ff7a1c' });
+        for (let k = 0; k < 12; k++) g.later(k * 0.2, () => {
+          if (!f.alive) return;
+          for (const t of g.enemiesIn(f, f.x, f.y, R)) { g.damage(t, 9 + 2 * L, f, 'fire'); if (k % 3 === 0) g.burn(t, 20, 3, f, 'fire'); const d = Math.hypot(t.x - f.x, t.y - f.y) || 1; g.knock && g.knock(t, (t.x - f.x) / d, (t.y - f.y) / d, 60); }
+        });
+        g.shake(3);
       }
       g.sfx('fire');
     },
@@ -76,14 +102,19 @@
 
   def('tp', {
     name: 'Téléportation', col: '#c874ff', type: 'aim', cd: L => 4, range: L => 380,
-    desc: 'Pose une balise secrète, puis reviens-y. Peut aussi téléporter un ennemi.',
+    desc: 'Pose une balise secrète, puis reviens-y. Peut aussi téléporter un ennemi, qui perd un de ses fruits.',
     cast(f, ab, aim) {
       const g = G();
       if (aim.m > 0.3) {
         const px = f.x + aim.x * A.tp.range(ab.lvl) * aim.m, py = f.y + aim.y * A.tp.range(ab.lvl) * aim.m;
         let best = null, bd = 110;
         for (const t of g.enemiesIn(f, px, py, 110)) { const d = Math.hypot(t.x - px, t.y - py); if (d < bd) { bd = d; best = t; } }
-        if (best) { g.teleportRandom(best); g.sfx('tp'); return 5 + ab.lvl * 0; }
+        if (best) {
+          // la victime perd un de ses fruits : il tombe là où elle se trouvait
+          const ox = best.x, oy = best.y, filled = []; best.slots.forEach((s, i) => { if (s && !s.stolen) filled.push(i); });
+          if (filled.length) { const k = filled[(Math.random() * filled.length) | 0], lost = best.slots[k]; best.slots[k] = null; g.addPickup({ kind: 'bloc', id: lost.id, lvl: lost.lvl, x: ox, y: oy, noPick: g.t + 1.2 }); g.text(ox, oy - 40, 'Fruit perdu', '#ffb0ff', 16); g.fx('burst', ox, oy, { col: '#e0b0ff', n: 16, life: 0.6 }); if (best === g.player) g.swap = null; }
+          g.teleportRandom(best); g.sfx('tp'); return 5 + ab.lvl * 0;
+        }
       }
       if (!f.beacon) { f.beacon = { x: f.x, y: f.y }; g.fx('ring', f.x, f.y, { r: 36, col: '#e0b0ff', life: 0.5, w: 4 }); g.sfx('click'); return 1; }
       g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 14, life: 0.5 });

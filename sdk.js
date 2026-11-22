@@ -81,7 +81,7 @@
   function defaults() {
     const chars = {};
     for (let i = 0; i < WB.CHARS.length; i++) chars[i] = { lvl: 1, xp: 0 };
-    return { v: 2, level: 1, coins: 0, trophies: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
+    return { v: 2, level: 1, coins: 0, trophies: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, music: true, sfxVol: 1, musVol: 0.6, duration: 240, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
   }
   WB.defaultSave = defaults;
 
@@ -95,6 +95,8 @@
     let best = Math.max(1, +d.level || 1); for (const k in r.chars) best = Math.max(best, (r.chars[k] && r.chars[k].lvl) || 1);
     r.level = Math.min(WB.MAXLV, best);
     r.name = (typeof d.name === 'string' && d.name.trim()) ? d.name : base.name;
+    r.duration = [180, 240, 300].indexOf(+r.duration) >= 0 ? +r.duration : 240;
+    r.sfxVol = Math.min(1, Math.max(0, r.sfxVol == null ? 1 : +r.sfxVol)); r.musVol = Math.min(1, Math.max(0, r.musVol == null ? 0.6 : +r.musVol)); r.music = r.music !== false;
     r.stats = Object.assign({ matches: 0, kills: 0, wins: 0 }, d.stats || {});
     r.owned = d.owned || {};
     return r;

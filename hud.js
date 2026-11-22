@@ -89,10 +89,17 @@
   }
 
   // ---------- pointeurs en jeu ----------
+  // Relâche toujours les joysticks : un doigt qui quitte l'écran, un appel, un changement d'application ou une pause ne doivent jamais laisser un stick coincé.
+  U.resetSticks = function () { sticks.move = null; sticks.aim = null; I.stickMove = false; I.move.x = I.move.y = 0; I.aim.active = false; I.aim.m = 0; };
+  U.releasePointer = function (id) {
+    if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
+    if (sticks.aim && sticks.aim.id === id) { sticks.aim = null; I.aim.active = false; I.aim.m = 0; }
+  };
   U.gamePointer = function (kind, e, px, py, x, y) {
     const G = WB.G; if (!G) return;
     if (e.pointerType) lastType = e.pointerType === 'mouse' ? 'mouse' : 'touch';
     if (U.screen === 'results' || U.paused || (G && G.over)) {
+      if (kind === 'up') U.releasePointer(e.pointerId);
       if (kind === 'down') U.setPressed(U.findBtn(x, y));
       else if (kind === 'up') { const b = U.pressedBtn(); U.setPressed(null); const cur = U.findBtn(x, y); if (b && cur && U.sameBtn(b, cur) && cur.fn) { WB.snd.play('click'); cur.fn(); } }
       return;

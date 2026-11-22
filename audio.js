@@ -7,12 +7,51 @@
     if (S.ctx) { if (S.ctx.state === 'suspended') S.ctx.resume(); return; }
     try {
       const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-      S.ctx = new AC(); S.master = S.ctx.createGain(); S.master.gain.value = 0.5; S.master.connect(S.ctx.destination);
+      S.ctx = new AC(); S.master = S.ctx.createGain(); S.master.gain.value = 0.5 * S.sfxVol; S.master.connect(S.ctx.destination);
       const b = S.ctx.createBuffer(1, S.ctx.sampleRate * 0.6, S.ctx.sampleRate), d = b.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; S.noiseBuf = b;
     } catch (e) {}
+    if (mTheme) { const t = mTheme; mTheme = null; S.music(t); }
   };
   S.setEnabled = function (v) { S.on = !!v; };
+  // ---------- musique de fond synthétisée (menu calme, combat rythmé) ----------
+  S.musicOn = true; S.musicVol = 0.6; S.sfxVol = 1;
+  const THEMES = {
+    menu:   { bpm: 84,  roots: [220, 174.6, 261.6, 196], third: [3, 4, 4, 4], arp: [0, 7, 12, 7, 15, 12, 7, 12], lead: 'triangle', bass: 'sine', beat: false },
+    battle: { bpm: 138, roots: [220, 220, 174.6, 196], third: [3, 3, 4, 4], arp: [0, 12, 7, 12, 0, 15, 7, 19], lead: 'square', bass: 'sawtooth', beat: true }
+  };
+  let mTheme = null, mNext = 0, mStep = 0, mTimer = null, mGain = null;
+  const hz = (root, semi) => root * Math.pow(2, semi / 12);
+  function mNote(f, t, dur, type, vol) {
+    const o = S.ctx.createOscillator(), g = S.ctx.createGain(); o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.015); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(mGain); o.start(t); o.stop(t + dur + 0.05);
+  }
+  function mTick() {
+    if (!S.ctx || !mTheme) return;
+    if (mGain) mGain.gain.value = (S.musicOn && S.platformOn && !S.adMute) ? 0.32 * S.musicVol : 0;
+    if (!S.musicOn || !S.platformOn || S.adMute || S.ctx.state !== 'running') { mNext = S.ctx.currentTime + 0.1; return; }
+    const th = THEMES[mTheme], spb = 60 / th.bpm / 2;
+    if (mNext < S.ctx.currentTime) mNext = S.ctx.currentTime + 0.05;
+    while (mNext < S.ctx.currentTime + 0.6) {
+      const bar = Math.floor(mStep / 8) % th.roots.length, st = mStep % 8, root = th.roots[bar], third = th.third[bar];
+      const semi = th.arp[st], sm = semi === 15 ? third + 12 : semi;
+      mNote(hz(root * 2, sm), mNext, spb * 1.6, th.lead, 0.07);
+      if (st === 0 || st === 4) mNote(root / 2, mNext, spb * 3.2, th.bass, th.beat ? 0.16 : 0.2);
+      if (th.beat && S.noiseBuf) { const src = S.ctx.createBufferSource(), f = S.ctx.createBiquadFilter(), g = S.ctx.createGain(); src.buffer = S.noiseBuf; f.type = st % 2 ? 'highpass' : 'lowpass'; f.frequency.value = st % 2 ? 7000 : 400; g.gain.setValueAtTime(st % 2 ? 0.06 : 0.22, mNext); g.gain.exponentialRampToValueAtTime(0.0001, mNext + (st % 2 ? 0.05 : 0.12)); src.connect(f); f.connect(g); g.connect(mGain); src.start(mNext); src.stop(mNext + 0.15); }
+      mNext += spb; mStep++;
+    }
+  }
+  // theme : 'menu', 'battle' ou null (silence)
+  S.music = function (theme) {
+    if (theme === mTheme) return; mTheme = theme; mStep = 0; mNext = 0;
+    if (!S.ctx) return; // sera démarrée au premier geste (unlock)
+    if (!mGain) { mGain = S.ctx.createGain(); mGain.connect(S.master); }
+    if (!mTimer) mTimer = setInterval(mTick, 180); mTick();
+  };
+  S.setMusic = function (on, vol) { S.musicOn = !!on; if (vol != null) S.musicVol = vol; if (mGain) mGain.gain.value = (S.musicOn && S.platformOn && !S.adMute) ? 0.32 * S.musicVol : 0; };
+  S.setSfxVolume = function (v) { S.sfxVol = v; if (S.master) S.master.gain.value = 0.5 * v; };
+
   S.setPlatformAudio = function (v) { S.platformOn = !!v; };
   S.setAdMute = function (v) { S.adMute = !!v; };
   let VS = 1;

@@ -20,7 +20,7 @@
     const W = WB.makeWorld(cfg.arena, (Math.random() * 1e9) | 0);
     const G = WB.G = {
       cfg: cfg, world: W, F: [], pickups: [], projs: [], fxs: [], walls: [], turrets: [], clowns: [], holes: [], timers: [], spiders: [], feed: [],
-      t: 0, timeLeft: MATCH_TIME, score: {}, over: false, shakeV: 0, cam: { x: 0, y: 0 }, player: null, swap: null, spawnT: 0, heartT: 0, coinsGot: 0,
+      t: 0, timeLeft: cfg.duration || MATCH_TIME, score: {}, over: false, shakeV: 0, cam: { x: 0, y: 0 }, player: null, swap: null, spawnT: 0, heartT: 0, coinsGot: 0,
       mode: WB.MODES.find(m => m.id === cfg.mode), results: null, paused: false, started: false, countdown: 3.2
     };
     let idc = 1;
@@ -184,6 +184,7 @@
       G.fx('ring', x, y, { r: 60, col: '#ff7a1c', life: 0.5, w: 7 }); G.fx('burst', x, y, { col: '#ff9a3c', n: 16, life: 0.6 }); G.sfx('fire');
     };
     function addPickup(p) { p.t = 0; p.noPick = p.noPick || 0; G.pickups.push(p); return p; }
+    G.addPickup = addPickup;
     G.kill = function (t, src, ab) {
       if (!t.alive) return;
       if (t.swallow) G.spit(t); let killer = src; if (killer && (killer.kind === 'thrall' || killer.kind === 'golem') && killer.owner) killer = killer.owner; else if (killer && killer.thrall && killer.thrall.owner) killer = killer.thrall.owner;
@@ -840,6 +841,20 @@
   function drawFx(ctx, e, G, time) {
     const u = Math.min(1, e.t / e.life), a = Math.max(0, 1 - u);
     switch (e.type) {
+      case 'beam': { // rayon d'énergie : cœur clair, bordure colorée, scintillement
+        const w = (e.w || 18) * (0.7 + 0.3 * Math.sin(u * 40)) * Math.min(1, (1 - u) * 2.5 + 0.3); ctx.globalAlpha = Math.min(1, a * 1.6); ctx.lineCap = 'round';
+        ctx.shadowColor = e.col; ctx.shadowBlur = 18; ctx.strokeStyle = e.col; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x2, e.y2); ctx.stroke(); ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#ffe9a0'; ctx.lineWidth = w * 0.45; ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x2, e.y2); ctx.stroke();
+        ctx.fillStyle = '#fff'; for (let k = 0; k < 6; k++) { const q = (k / 6 + u * 2) % 1; ctx.beginPath(); ctx.arc(e.x + (e.x2 - e.x) * q + Math.sin(k * 7 + u * 30) * 5, e.y + (e.y2 - e.y) * q + Math.cos(k * 5 + u * 30) * 5, 2.5, 0, PI2); ctx.fill(); }
+        ctx.lineCap = 'butt'; ctx.globalAlpha = 1; break; }
+      case 'whirl': { // tourbillon de flammes autour du personnage
+        const cx = e.f ? e.f.x : e.x, cy = e.f ? e.f.y : e.y, R = e.r * Math.min(1, u * 6), fade = u > 0.8 ? (1 - u) / 0.2 : 1, ang = e.t * 7;
+        ctx.save(); ctx.globalAlpha = 0.9 * fade; ctx.shadowColor = '#ff5a00'; ctx.shadowBlur = 16;
+        for (let arm = 0; arm < 4; arm++) for (let k = 0; k < 26; k++) {
+          const q = k / 26, aa = ang + arm * Math.PI / 2 + q * 2.4, rr = R * (0.25 + 0.75 * q), x = cx + Math.cos(aa) * rr, y = cy + Math.sin(aa) * rr * 0.9;
+          ctx.fillStyle = q < 0.4 ? '#ffe27a' : q < 0.75 ? '#ff9a2a' : '#ff4a1a'; ctx.beginPath(); ctx.arc(x, y, 5 + 9 * q, 0, PI2); ctx.fill();
+        }
+        ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(255,140,40,.55)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(cx, cy, R, R * 0.9, 0, 0, PI2); ctx.stroke(); ctx.restore(); break; }
       case 'ring': ctx.strokeStyle = e.col; ctx.globalAlpha = a; ctx.lineWidth = Math.max(0.5, (e.w || 4) * a + 1); ctx.beginPath(); ctx.arc(e.x, e.y, Math.max(0.1, Math.abs(e.r) * (0.2 + 0.8 * Math.min(1, u * 2.2))), 0, PI2); ctx.stroke(); ctx.globalAlpha = 1; break;
       case 'snow': ctx.fillStyle = 'rgba(190,240,255,' + a + ')'; ctx.strokeStyle = 'rgba(230,252,255,' + a + ')'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(e.x, e.y, e.r * Math.min(1, u * 3), 0, PI2); ctx.globalAlpha = a * 0.25; ctx.fill(); ctx.globalAlpha = 1; for (const p of e.ps) { ctx.save(); ctx.translate(e.x + p.x, e.y + p.y); ctx.rotate(u * 2); ctx.globalAlpha = a; ctx.beginPath(); ctx.moveTo(0, -p.r); ctx.lineTo(p.r * 0.6, 0); ctx.lineTo(0, p.r); ctx.lineTo(-p.r * 0.6, 0); ctx.closePath(); ctx.fillStyle = '#d8f6ff'; ctx.fill(); ctx.restore(); } ctx.globalAlpha = 1; break;
       case 'burst': ctx.fillStyle = e.col; ctx.globalAlpha = a; for (const p of e.ps) { ctx.beginPath(); ctx.arc(e.x + p.vx * e.t, e.y + p.vy * e.t, p.r * a + 0.5, 0, PI2); ctx.fill(); } ctx.globalAlpha = 1; break;
