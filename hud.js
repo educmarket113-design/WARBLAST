@@ -3,7 +3,7 @@
   const U = WB.ui, A = WB.ABIL, PI2 = Math.PI * 2, FONT = '"Trebuchet MS","Segoe UI",Arial,sans-serif';
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const I = WB.input;
-  const sticks = U.sticks = { move: null };
+  const sticks = U.sticks = { move: null, atk: null };
   let lastType = 'mouse', resultsT = 0;
 
   // ---------- icônes d'interface supplémentaires ----------
@@ -58,8 +58,6 @@
     const m = /^(Digit|Numpad)([1-9])$/.exec(e.code);
     if (m) { const n = parseInt(m[2], 10); if (G.formPrompt && n >= 7) { G.formPrompt.ab.form = ['shark', 'golem', 'dragon'][n - 7]; G.formPrompt = null; return; } castSlot(n - 1); return; }
     if (k === ' ') throwBomb();
-    else if (k === 'e' || k === 'shift') { U.chainMode = !U.chainMode; U.chainSel = []; }
-    else if (k === 'f' || k === 'enter') fireChain();
     else if (k === 'x' && G.swap) G.declineSwap();
   };
 
@@ -73,14 +71,8 @@
     if (G.swap) { G.swapSlot(i); return; }
     if (!f.alive || i >= f.slots.length) return;
     const ab = f.slots[i]; if (!ab || (ab.id === 'summon' && !ab.form)) { WB.snd.play('hit'); return; }
-    if (U.chainMode) { const p = U.chainSel.indexOf(i); if (p >= 0) U.chainSel.splice(p, 1); else if (U.chainSel.length < WB.chainMax(f.level)) U.chainSel.push(i); WB.snd.play('click'); return; }
     const aim = curAim(f, ab);
     WB.G.useSlot(f, i, aim);
-  }
-  function fireChain() {
-    const G = WB.G, f = G.player; if (!U.chainSel.length || !f.alive) return;
-    const first = f.slots[U.chainSel[0]]; const aim = curAim(f, first);
-    G.chain(f, U.chainSel.slice(), aim); U.chainSel = []; U.chainMode = false;
   }
   function throwBomb(aim) {
     const G = WB.G, f = G.player; if (!G.started || G.over || f.thrall) return;
@@ -89,11 +81,55 @@
     if (!G.throwBomb(f, a)) { if (f.bombs <= 0) U.showToast('Plus de bombes', '#ffb0b0'); }
   }
 
+
+  // ---------- stick d'attaque : capacités chargées ----------
+  function normLoadout(f) {
+    const mx = WB.chainMax(f.level || 1); let lo = f.loadout; if (!Array.isArray(lo)) lo = f.loadout = [];
+    lo.length = mx; for (let k = 0; k < mx; k++) { if (lo[k] == null || !f.slots[lo[k]] || lo.indexOf(lo[k]) !== k) lo[k] = null; }
+  }
+  // disposition par niveau : 1 à 6 un seul au centre ; 7 deux côte à côte ; 8 triangle ; 9 quatre en losange (comme une manette PSP) ; 10 losange + centre
+  function atkLayout(f) {
+    const mx = WB.chainMax(f.level || 1);
+    if (mx <= 1) return [{ x: 0, y: 0, r: 32 }];
+    if (mx === 2) return [{ x: -34, y: 0, r: 27 }, { x: 34, y: 0, r: 27 }];
+    if (mx === 3) return [{ x: 0, y: -37, r: 25 }, { x: -37, y: 27, r: 25 }, { x: 37, y: 27, r: 25 }];
+    if (mx === 4) return [{ x: 0, y: -42, r: 23 }, { x: 42, y: 0, r: 23 }, { x: 0, y: 42, r: 23 }, { x: -42, y: 0, r: 23 }];
+    return [{ x: 0, y: -46, r: 20 }, { x: 46, y: 0, r: 20 }, { x: 0, y: 46, r: 20 }, { x: -46, y: 0, r: 20 }, { x: 0, y: 0, r: 20 }];
+  }
+  U.assignAtk = function (i, pos) {
+    const f = WB.G.player, ab = f.slots[i]; if (!ab) return false; normLoadout(f); const lo = f.loadout, mx = lo.length;
+    const was = lo.indexOf(i);
+    if (mx === 1) { lo[0] = i; WB.snd.play('click'); return true; }
+    if (was >= 0 && pos == null) return false;
+    if (was >= 0) lo[was] = null;
+    let p = pos; if (p == null) { p = lo.indexOf(null); if (p < 0) p = 0; }
+    lo[p] = i; WB.snd.play('click'); return true;
+  };
+  U.unassignAtk = function (i) { const f = WB.G.player; normLoadout(f); const k = f.loadout.indexOf(i); if (k >= 0 && f.loadout.length > 1) { f.loadout[k] = null; return true; } return false; };
+  function drawAbilityDisc(ctx, f, ab, cx, cy, r, o) {
+    const def = A[ab.id], G = WB.G, n = ab.n == null ? 5 : ab.n, recharge = ab.cd > 0, blocked = f.st.silence > 0 || f.st.frozen > 0 || f.swallowed, mx = def.cd(ab.lvl) * WB.cdMul(ab.id);
+    ctx.save(); ctx.globalAlpha = o.drag ? 0.9 : 1;
+    const g = ctx.createRadialGradient(cx, cy - r * 0.15, 3, cx, cy, r); g.addColorStop(0, '#1c2447'); g.addColorStop(1, '#0c1230'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, PI2); ctx.fill();
+    if (o.prog) { const fr = WB.abilProgress(ab), RR = r - 3; if (fr > 0) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, RR, 0, PI2); ctx.clip(); const top = cy + RR - 2 * RR * fr; ctx.fillStyle = def.col; ctx.globalAlpha = 0.8; ctx.fillRect(cx - RR, top, 2 * RR, cy + RR - top + 1); ctx.restore(); } }
+    ctx.lineWidth = o.only ? 5 : 3.5; ctx.strokeStyle = o.loaded ? '#ffffff' : ab.stolen ? '#ff8ad0' : (recharge ? '#5a6490' : def.col); if (o.glow) { ctx.shadowColor = '#fff'; ctx.shadowBlur = 12 * o.glow; } ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.globalAlpha *= recharge ? 0.55 : 1; WB.drawIcon(ctx, (ab.id === 'summon' && ab.form) ? ab.form : ab.id, cx, cy - 1, r * 1.25); ctx.globalAlpha = o.drag ? 0.9 : 1;
+    if (recharge) { ctx.fillStyle = 'rgba(5,8,24,.68)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(ab.cd / mx, 0, 1)); ctx.closePath(); ctx.fill(); text(ab.cd >= 10 ? String(Math.ceil(ab.cd)) : ab.cd.toFixed(1), cx, cy, Math.max(12, r * 0.6), '#fff', 'center', 4); }
+    if (blocked) { ctx.fillStyle = 'rgba(10,10,30,.45)'; ctx.beginPath(); ctx.arc(cx, cy, r - 2, 0, PI2); ctx.fill(); WB.drawIcon(ctx, 'lock', cx + r * 0.5, cy + r * 0.5, r * 0.5); }
+    // charges restantes x/5
+    const bw = Math.max(26, r * 0.9), bh = 15, bxx = cx + r * 0.55 - bw / 2 + 2, byy = cy + r - 8;
+    ctx.fillStyle = recharge ? '#7a2a2a' : n <= 1 ? '#a8631a' : '#16213f'; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5; U.rr(ctx, cx - bw / 2, byy - bh / 2 + 4, bw, bh, 7); ctx.fill(); ctx.stroke();
+    text(n + '/5', cx, byy + 5, 11, '#fff', 'center', 3);
+    if (o.dots) { for (let k = 0; k < 5; k++) { ctx.fillStyle = k < ab.lvl ? '#ffd24a' : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(cx - 16 + k * 8, cy - r - 5, 2.7, 0, PI2); ctx.fill(); } }
+    ctx.restore();
+  }
+
   // ---------- pointeurs en jeu ----------
   // Relâche toujours les joysticks : un doigt qui quitte l'écran, un appel, un changement d'application ou une pause ne doivent jamais laisser un stick coincé.
-  U.resetSticks = function () { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; I.aim.active = false; I.aim.m = 0; };
+  U.resetSticks = function () { sticks.move = null; sticks.atk = null; U.dragSlot = null; I.stickMove = false; I.move.x = I.move.y = 0; I.aim.active = false; I.aim.m = 0; };
   U.releasePointer = function (id) {
     if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
+    if (sticks.atk && sticks.atk.id === id) sticks.atk = null;
+    if (U.dragSlot && U.dragSlot.id === id) U.dragSlot = null;
   };
   U.gamePointer = function (kind, e, px, py, x, y) {
     const G = WB.G; if (!G) return;
@@ -106,6 +142,11 @@
     }
     const id = e.pointerId;
     if (kind === 'down') {
+      const at = U.atk, pf = G.player;
+      if (at && pf && pf.alive && !G.over) {
+        for (let i = 0; i < at.pos.length; i++) { const p = at.pos[i]; if (Math.hypot(x - (p.x + at.sw / 2), y - (p.y + at.sw / 2)) <= at.sw / 2 + 6) { if (G.swap) { castSlot(i); return; } if (pf.slots[i] && !U.dragSlot) U.dragSlot = { id: id, i: i, x: x, y: y, sx: x, sy: y, moved: false }; return; } }
+        if (Math.hypot(x - at.A.x, y - at.A.y) <= at.R + 10 && !sticks.atk) { let only = null; at.icons.forEach(function (ic, k) { if (pf.loadout[k] != null && Math.hypot(x - (at.A.x + ic.x), y - (at.A.y + ic.y)) <= ic.r + 4) only = pf.loadout[k]; }); sticks.atk = { id: id, x: x, y: y, only: only }; return; }
+      }
       const b = U.findBtn(x, y);
       if (b) { U.setPressed(b); if (b.instant && b.fn) { b.fn(); U.setPressed(null); } return; }
       if (e.pointerType === 'mouse') { if (e.button === 0) { const a = mouseAim(); if (a) throwBomb(a); } else if (e.button === 2) { /* clic droit : première case */ castSlot(0); } return; }
@@ -113,7 +154,19 @@
     } else if (kind === 'move') {
       const s = sticks.move && sticks.move.id === id ? sticks.move : null;
       if (s) { s.x = x; s.y = y; }
+      if (sticks.atk && sticks.atk.id === id) { sticks.atk.x = x; sticks.atk.y = y; }
+      if (U.dragSlot && U.dragSlot.id === id) { const dr = U.dragSlot; dr.x = x; dr.y = y; if (Math.hypot(x - dr.sx, y - dr.sy) > 10) dr.moved = true; }
     } else if (kind === 'up') {
+      if (sticks.atk && sticks.atk.id === id) sticks.atk = null;
+      if (U.dragSlot && U.dragSlot.id === id) {
+        const dr = U.dragSlot, at = U.atk, pf = G.player; U.dragSlot = null;
+        if (at && pf && pf.alive) {
+          const lo = pf.loadout;
+          if (dr.moved) { if (Math.hypot(x - at.A.x, y - at.A.y) <= at.R + 16) { let best = 0, bd = 1e9; at.icons.forEach(function (ic, k) { const d = Math.hypot(x - (at.A.x + ic.x), y - (at.A.y + ic.y)); if (d < bd) { bd = d; best = k; } }); let p = null; if (lo.length > 1) p = lo[best] == null ? best : (lo.indexOf(null) >= 0 ? lo.indexOf(null) : best); U.assignAtk(dr.i, p); } }
+          else if (lo.indexOf(dr.i) >= 0) U.unassignAtk(dr.i); else U.assignAtk(dr.i, null);
+        }
+        return;
+      }
       const b = U.pressedBtn(); if (b && !b.instant) { U.setPressed(null); const cur = U.findBtn(x, y); if (cur && U.sameBtn(b, cur) && cur.fn) { WB.snd.play('click'); cur.fn(); } }
       if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
     }
@@ -124,7 +177,19 @@
     const sx = (G.player.x - v.x0) * v.z, sy = (G.player.y - v.y0) * v.z, dx = U.mousePx - sx, dy = U.mousePy - sy, d = Math.hypot(dx, dy) || 1;
     return { x: dx / d, y: dy / d, m: clamp(d / (360 * v.z), 0.2, 1) };
   }
+  function attackStick() {
+    const st = sticks.atk, G = WB.G, f = G.player; if (!st || !f || !f.alive || !G.started || G.over || f.thrall || f.swallowed || !U.atk) return;
+    const dx = st.x - U.atk.A.x, dy = st.y - U.atk.A.y, d = Math.hypot(dx, dy), R = U.atk.R; if (d < R * 0.28) return;
+    const ux = dx / d, uy = dy / d, m = clamp(d / R, 0.25, 1), list = st.only != null ? [st.only] : f.loadout.filter(function (v) { return v != null; });
+    for (const i of list) {
+      const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
+      const au = G.autoAim(f, ab); let aim = { x: ux, y: uy, m: m };
+      if (au.target && au.x * ux + au.y * uy >= 0.93) aim = au;   // un adversaire dans la direction poussée : la capacité part sur lui
+      G.useSlot(f, i, aim);
+    }
+  }
   function updateSticks() {
+    attackStick();
     if (sticks.move) { const s = sticks.move, dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), R = 60; if (d > R) { s.ox += dx / d * (d - R); s.oy += dy / d * (d - R); } const m = clamp(d / R, 0, 1); I.move.x = d > 6 ? dx / d * m : 0; I.move.y = d > 6 ? dy / d * m : 0; I.stickMove = true; }
 
     if (lastType === 'mouse') { const a = mouseAim(); if (a) { I.aim.active = true; I.aim.x = a.x; I.aim.y = a.y; I.aim.m = a.m; } }
@@ -236,12 +301,13 @@
       ctx.strokeStyle = '#4adcc8'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W / 2, py0 - 28, 10, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(fp.t / 10, 0, 1)); ctx.stroke();
     }
     if (f.swallowed) { panel(W / 2 - 130, H * 0.1, 260, 36, { r: 14, stroke: '#ff8ad0' }); text("Tu es avalé", W / 2, H * 0.1 + 19, 16, '#ffd0e4', 'center', 3); }
-    // case de capacités
-    // toutes les touches d'action sont regroupées dans le coin inférieur droit : la bombe en bas à droite, les capacités autour
-    const n = f.slots.length, sw = n > 8 ? 50 : 56, gap = 8, rowH = sw + 17, M = 14, COLS = 4, bs = 74;
-    const cell = function (r, c) { return { x: W - M - sw - c * (sw + gap) - (r === 0 ? 0 : 0), y: H - M - sw - 12 - r * rowH }; };
-    const pos = []; { let r = 0, c = 1; for (let i = 0; i < n; i++) { if (r === 0 && c === 1) c = 1; const q = cell(r, c); if (r === 0) q.x -= (bs - sw); pos.push(q); c++; if (c >= COLS) { r++; c = 0; } } }
-    const rows = Math.max(1, Math.ceil((n + 1) / COLS)), sy = H - M - 12 - sw - (rows - 1) * rowH, sx0 = W - M - COLS * (sw + gap) - bs + sw;
+    // ---- capacités (extrême droite), stick d'attaque toujours visible, bombe ----
+    const n = f.slots.length, sw = 54, gap = 8, rowH = sw + 18, M = 14, bs = 64, R = 76;
+    normLoadout(f);
+    const pos = []; for (let i = 0; i < n; i++) pos.push({ x: W - M - sw - (i % 2) * (sw + gap), y: H - M - sw - 12 - Math.floor(i / 2) * rowH });
+    const rowsN = Math.max(1, Math.ceil(n / 2)), sy = H - M - sw - 12 - (rowsN - 1) * rowH;
+    const A0 = { x: W - M - 2 * sw - gap - 18 - R, y: H - M - R - 4 };
+    const icons = atkLayout(f); U.atk = { A: A0, R: R, sw: sw, pos: pos, icons: icons };
     if (G.swap) {
       const pk = G.swap.pk; panel(W - M - 396, sy - 78, 380, 66, { r: 14, stroke: A[pk.id].col });
       WB.drawIcon(ctx, pk.id, W - M - 366, sy - 45, 38); text('N' + pk.lvl, W - M - 346, sy - 25, 12, '#ffd24a', 'left', 3);
@@ -249,42 +315,42 @@
       ctx.strokeStyle = A[pk.id].col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W - M - 366, sy - 45, 24, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(G.swap.t / 7, 0, 1)); ctx.stroke();
       btn(W - M - 120, sy - 66, 104, 42, { label: 'Garder', size: 15, style: 'gray', fn: function () { G.declineSwap(); } });
     }
+    const pulse = 0.5 + 0.5 * Math.sin(time * 9), dr = U.dragSlot;
+    // cases de capacités
     for (let i = 0; i < n; i++) {
-      const x = pos[i].x, ys = pos[i].y, cx = x + sw / 2, cy = ys + sw / 2, ab = f.slots[i];
-      btn(x, ys, sw, sw, { hidden: true, instant: true, fn: (function (k) { return function () { castSlot(k); }; })(i) });
+      const x = pos[i].x, ys = pos[i].y, cx = x + sw / 2, cy = ys + sw / 2, ab = f.slots[i], inA = f.loadout.indexOf(i) >= 0;
       ctx.save();
-      const swap = !!G.swap;
       if (!ab) {
-        ctx.setLineDash([7, 6]); ctx.lineWidth = 3; ctx.strokeStyle = swap ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.65)'; ctx.fillStyle = 'rgba(10,14,34,.45)'; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 2, 0, PI2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+        ctx.setLineDash([7, 6]); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.fillStyle = 'rgba(10,14,34,.45)'; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 2, 0, PI2); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
         text(String(i + 1), cx, cy, 15, 'rgba(255,255,255,.35)', 'center');
       } else {
-        const def = A[ab.id], ready = ab.cd <= 0, mx = def.cd(ab.lvl) * WB.cdMul(ab.id), blocked = f.st.silence > 0 || f.st.frozen > 0 || f.swallowed;
-        let near = false; if (ready && def.type === 'zone') near = G.enemiesIn(f, f.x, f.y, def.range(ab.lvl)).length > 0;
-        const pulse = 0.5 + 0.5 * Math.sin(time * 9);
-        if (near) { ctx.shadowColor = def.col; ctx.shadowBlur = 18 + 10 * pulse; }
-        const g = ctx.createRadialGradient(cx, cy - 8, 4, cx, cy, sw / 2); g.addColorStop(0, near ? def.col : '#1c2447'); g.addColorStop(1, near ? '#10183a' : '#0c1230');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 1, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
-        // remplissage = vraie progression de la capacité (niveau et éliminations), du bas vers le haut
-        { const fr = WB.abilProgress(ab), R = sw / 2 - 3; if (fr > 0) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, PI2); ctx.clip(); const top = cy + R - 2 * R * fr; ctx.fillStyle = def.col; ctx.globalAlpha = 0.85; ctx.fillRect(cx - R, top, 2 * R, cy + R - top + 1); ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(cx - R, top, 2 * R, 2.5); ctx.restore(); } }
-        ctx.lineWidth = near ? 5 : 3.5; ctx.strokeStyle = ab.stolen ? '#ff8ad0' : (ready ? def.col : '#5a6490'); ctx.stroke();
-        ctx.globalAlpha = ready ? 1 : 0.55; WB.drawIcon(ctx, (ab.id === 'summon' && ab.form) ? ab.form : ab.id, cx, cy - 2, sw * 0.62); ctx.globalAlpha = 1;
-        if (!ready) { ctx.fillStyle = 'rgba(5,8,24,.65)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, sw / 2 - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(ab.cd / mx, 0, 1)); ctx.closePath(); ctx.fill(); text(ab.cd >= 10 ? String(Math.ceil(ab.cd)) : ab.cd.toFixed(1), cx, cy, 16, '#fff', 'center', 4); }
-        for (let k = 0; k < 5; k++) { ctx.fillStyle = k < ab.lvl ? '#ffd24a' : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(cx - 16 + k * 8, cy + sw / 2 + 8, 2.7, 0, PI2); ctx.fill(); }
-        if (blocked) { ctx.fillStyle = 'rgba(10,10,30,.45)'; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 2, 0, PI2); ctx.fill(); WB.drawIcon(ctx, 'lock', cx + 16, cy + 16, 16); }
-        const ci = U.chainSel.indexOf(i); if (ci >= 0) { ctx.fillStyle = '#ff8aff'; ctx.beginPath(); ctx.arc(x + sw - 6, ys + 6, 11, 0, PI2); ctx.fill(); text(String(ci + 1), x + sw - 6, ys + 7, 13, '#fff', 'center'); }
-        if (swap) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.5 * pulse) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 + 4, 0, PI2); ctx.stroke(); }
+        const def = A[ab.id];
+        ctx.globalAlpha = dr && dr.i === i && dr.moved ? 0.35 : 1;
+        drawAbilityDisc(ctx, f, ab, cx, cy, sw / 2, { prog: true, dots: true, loaded: inA, glow: G.swap ? pulse : 0, time: time });
       }
       ctx.restore();
     }
-    function y0(v) { return v; }
-    // enchaînement (niveaux 7 et plus)
-    if (WB.chainMax(f.level) > 1) {
-      const cx = sx0 - 12;
-      btn(cx, H - M - 12 - 56, 56, 56, { icon: 'chain', style: U.chainMode ? 'gold' : 'dark', instant: true, sel: U.chainMode, fn: function () { if (U.chainMode && U.chainSel.length) fireChain(); else { U.chainMode = !U.chainMode; U.chainSel = []; } } });
+    // stick d'attaque
+    {
+      const st = sticks.atk, act = !!st; ctx.save();
+      ctx.fillStyle = act ? 'rgba(255,190,90,.22)' : 'rgba(255,190,90,.12)'; ctx.strokeStyle = act ? 'rgba(255,205,120,.95)' : 'rgba(255,205,120,.6)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(A0.x, A0.y, R, 0, PI2); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(A0.x, A0.y, R * 0.28, 0, PI2); ctx.stroke();
+      const hov = dr && dr.moved && Math.hypot(dr.x - A0.x, dr.y - A0.y) <= R + 16;
+      if (hov) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 + 0.5 * pulse) + ')'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(A0.x, A0.y, R + 6, 0, PI2); ctx.stroke(); }
+      for (let k = 0; k < icons.length; k++) {
+        const ic = icons[k], ix = A0.x + ic.x, iy = A0.y + ic.y, i = f.loadout[k], ab = i != null ? f.slots[i] : null;
+        if (!ab) { ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,255,255,' + (dr && dr.moved ? 0.6 + 0.3 * pulse : 0.3) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, ic.r, 0, PI2); ctx.stroke(); ctx.setLineDash([]); continue; }
+        drawAbilityDisc(ctx, f, ab, ix, iy, ic.r, { badge: true, time: time, only: st && st.only === i });
+      }
+      if (!f.loadout.some(function (v) { return v != null; })) { text(n ? 'Glisse une capacité' : 'Ramasse un fruit', A0.x, A0.y - R - 14, 13, '#ffe9a8', 'center', 3); if (n && sy) { ctx.strokeStyle = 'rgba(255,233,168,' + (0.4 + 0.5 * pulse) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x, A0.y, R + 8, 0, PI2); ctx.stroke(); } }
+      if (st) { const dx = st.x - A0.x, dy = st.y - A0.y, d = Math.hypot(dx, dy), q = d > R ? R / d : 1; ctx.fillStyle = 'rgba(255,230,160,.9)'; ctx.strokeStyle = 'rgba(120,70,10,.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x + dx * q, A0.y + dy * q, 16, 0, PI2); ctx.fill(); ctx.stroke(); }
+      ctx.restore();
     }
+    // capacité en cours de déplacement
+    if (dr && dr.moved && f.slots[dr.i]) drawAbilityDisc(ctx, f, f.slots[dr.i], dr.x, dr.y, sw / 2 + 4, { time: time, drag: true });
     // bombe
-    const bx = W - M - bs, by = H - M - bs;
-    btn(bx, by, bs, bs, { style: f.bombs > 0 ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 40); text('x' + f.bombs, cx + 20, cy + 22, 16, '#fff', 'center', 4); } });
+    const bx = A0.x - R - 14 - bs, by = H - M - bs;
+    btn(bx, by, bs, bs, { style: f.bombs > 0 ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 36); text('x' + f.bombs, cx + 18, cy + 20, 15, '#fff', 'center', 4); } });
     // joysticks
     if (WB.input.touch || lastType === 'touch') {
       const hint = !sticks.move && G.t < 14 ? 0.5 : 0;
@@ -301,7 +367,6 @@
     if (f.thrall && f.alive && !G.over) { const th = f.thrall; panel(W / 2 - 150, H * 0.2, 300, 58, { fill: 'rgba(8,40,28,.82)', stroke: '#8affc8' }); WB.drawIcon(ctx, 'necro', W / 2 - 120, H * 0.2 + 29, 30); text(th.phase === 1 ? 'Tu es possédé' : 'Esclave pour de bon', W / 2 + 10, H * 0.2 + 18, 18, '#8affc8', 'center', 4); text(th.phase === 1 ? 'Survis ' + Math.ceil(th.t) + ' s pour te libérer' : 'Tu ne peux plus te libérer', W / 2 + 10, H * 0.2 + 40, 13, '#fff', 'center', 3); }
     if (!f.alive && !G.over) { panel(W / 2 - 150, H * 0.3, 300, 70, { fill: 'rgba(40,6,10,.8)', stroke: '#ff6a6a' }); text('Éliminé', W / 2, H * 0.3 + 22, 26, '#ff8a8a', 'center', 5); text('Retour dans ' + Math.max(1, Math.ceil(f.respawnT)) + ' s', W / 2, H * 0.3 + 50, 17, '#fff', 'center', 4); }
     if (G.over) { text('Fin du combat', W / 2, H * 0.36, 52, '#ffd24a', 'center', 8); }
-    if (U.chainMode) text('Choisis jusqu\'à ' + WB.chainMax(f.level) + ' capacités, puis le bouton de chaîne', W / 2, sy - 100, 14, '#ffb0ff', 'center', 4);
     if (lastType === 'mouse' && G.t < 12) text('ZQSD bouger   Souris viser   Clic bombe   1 à 6 capacités   P pause', W / 2, H - 100, 14, 'rgba(255,255,255,.75)', 'center', 4);
   }
 

@@ -299,11 +299,13 @@
     // ---- utilisation des capacités ----
     G.canCast = f => f.alive && !(f.st.frozen > 0) && !(f.st.silence > 0) && !(f.st.jump || f.ghost) && G.started;
     G.useSlot = function (f, i, aim) {
-      const ab = f.slots[i]; if (!ab || !G.canCast(f) || ab.cd > 0) return false;
+      const ab = f.slots[i]; if (!ab || !G.canCast(f) || ab.cd > 0 || ab.gap > 0) return false;
       const def = A[ab.id]; if (def.type === 'aim' && aim.m == null) aim.m = 0.7;
       G.muteSfx = true; let r; try { r = def.cast(f, ab, aim); } finally { G.muteSfx = false; } if (r === false) return false;
       f.castT = 0.4; if (WB.evoFx) WB.evoFx(f, ab); { const pl = G.player, dd = pl ? Math.hypot(pl.x - f.x, pl.y - f.y) : 0, vv = f === pl ? 1 : Math.max(0, 1 - dd / 700) * 0.8; if (vv > 0.05) WB.snd.play('ab_' + ab.id, vv); }
-      ab.cd = (typeof r === 'number' ? r : def.cd(ab.lvl)) * WB.cdMul(ab.id) * (f.kind === 'boss' ? 1.7 : f.kind === 'minion' ? 1.4 : 1); f.aimLast = { x: aim.x, y: aim.y }; return true;
+      // 5 utilisations par série, puis recharge de toute la série ; chaque capacité a ses propres charges
+      ab.n = (ab.n == null ? 5 : ab.n) - 1; ab.gap = 0.4; if (ab.n <= 0) { ab.n = 0; ab.cd = def.cd(ab.lvl) * WB.cdMul(ab.id) * (f.kind === 'boss' ? 1.7 : f.kind === 'minion' ? 1.4 : 1); }
+      f.aimLast = { x: aim.x, y: aim.y }; return true;
     };
     G.chain = function (f, list, aim) {
       let n = 0;
@@ -445,7 +447,7 @@
       const d = dist(f, t); let casts = 0; const maxC = WB.chainMax(f.level);
       if (!(f.st.silence > 0)) {
         for (let i = 0; i < f.slots.length && casts < maxC; i++) {
-          const ab = f.slots[i]; if (!ab || ab.cd > 0) continue; const def = A[ab.id], ai = def.ai || {};
+          const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0) continue; const def = A[ab.id], ai = def.ai || {};
           const max = ai.max ? ai.max(ab.lvl) : def.range(ab.lvl), min = ai.min || 0;
           if (d > max || d < min) continue; if (ai.cond && !ai.cond(f, ab, t, d)) continue;
           if (Math.random() > (f.kind === 'minion' ? 0.3 : f.kind === 'boss' ? 0.5 : 0.65)) continue;
@@ -489,7 +491,7 @@
       f.armT = Math.max(0, (f.armT || 0) - dt); f.castT = Math.max(0, (f.castT || 0) - dt);
       if (f.eat) { f.eat.t += dt; if (f.eat.t >= f.eat.dur) f.eat = null; }
       f.hurtT = Math.max(0, f.hurtT - dt); f.flash = Math.max(0, f.flash - dt); f.bombCd = Math.max(0, f.bombCd - dt); f.t += dt;
-      for (const ab of f.slots) if (ab && ab.cd > 0) { ab.cd -= dt; if (ab.cd <= 0) { ab.cd = 0; if (ab.id === 'dash' && ab.charges <= 0) ab.charges = 3; } }
+      for (const ab of f.slots) if (ab) { if (ab.gap > 0) ab.gap -= dt; if (ab.cd > 0) { ab.cd -= dt; if (ab.cd <= 0) { ab.cd = 0; ab.n = 5; } } else if (ab.n != null && ab.n <= 0) ab.n = 5; }
       if (f.kind === 'thrall' || f.kind === 'golem') { f.life -= dt; if (f.life <= 0 || !f.owner.alive) { G.kill(f, null, null); return; } }
       if (f.swallowed) { const sw = f.swallowed; if (!sw.by.alive) G.spit(sw.by); else { f.x = sw.by.x; f.y = sw.by.y; f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; } }
       if (f.sharkHold) { f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; }

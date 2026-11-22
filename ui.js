@@ -396,8 +396,8 @@
 
   const RULES = [
     ['But du jeu', 'Tu combats sur une arène contre des bots : chacun pour soi, 2 équipes de 5 ou 3 équipes de 3. Chaque élimination rapporte un point. À la fin du temps choisi (3, 4 ou 5 minutes), le meilleur score, ou la meilleure équipe, gagne.'],
-    ['Combat', 'Tu as 300 points de vie au niveau 1 et 5 bombes par partie. Ramasse les cœurs pour te soigner. Une pression sur la bombe ou sur une capacité vise l\'ennemi le plus proche. Évite l\'eau, le feu, les araignées, les sbires noirs et les boss rouges.'],
-    ['Fruits et capacités', 'Les fruits au sol donnent une capacité dans une case libre. Chaque élimination avec une capacité la fait monter de niveau, jusqu\'au niveau 5 : à chaque niveau le pouvoir change vraiment (voir « Les pouvoirs »).'],
+    ['Combat', 'Tu as 300 points de vie au niveau 1 et 5 bombes par partie. Ramasse les cœurs pour te soigner. Le bouton bombe vise l\'ennemi le plus proche. Les capacités se lancent avec le stick d\'attaque. Évite l\'eau, le feu, les araignées, les sbires noirs et les boss rouges.'],
+    ['Fruits et capacités', 'Les fruits au sol donnent une capacité dans une case libre. Glisse une capacité dans le stick d\'attaque, puis pousse le stick vers l\'ennemi : elle part toute seule. Chaque capacité a 5 utilisations, puis une recharge. Elle monte de niveau avec les éliminations, jusqu\'au niveau 5 (voir « Les pouvoirs »).'],
     ['Niveau du profil', 'Ton niveau va de 1 à 10 et vaut pour tous tes personnages. Il monte avec tes éliminations, comptées seulement entre deux niveaux : 100, 200, 200, 300, 300, 400, 450, 600 puis 1 000. Chaque niveau donne plus de cases de capacité, de l\'enchaînement et des fruits de départ plus forts.']
   ];
   screens.rules = function (time) {
@@ -435,9 +435,9 @@
   };
 
   const HELP = [
-    ['joystick', 'Stick à gauche : se déplacer. Il n\'y a plus de stick de visée : tout se vise tout seul sur l\'ennemi le plus proche.'],
+    ['joystick', 'Stick de gauche : se déplacer. Stick d\'attaque rond, en bas à droite : glisse une capacité dedans, puis pousse-le vers l\'ennemi pour l\'utiliser.'],
     ['bomb', 'Bouton bombe, en bas à droite : une pression lance une bombe sur l\'ennemi le plus proche. Tu en as 5 par partie.'],
-    ['spark', 'Ramasse les blocs au sol pour remplir tes cases vides, en bas de l\'écran. Les cases sont en bas à droite : une pression lance la capacité.'],
+    ['spark', 'Ramasse les fruits au sol pour remplir tes cases, à l\'extrême droite. Niveaux 1 à 6 : une capacité dans le stick. Niveaux 7 à 10 : jusqu\'à 5 en même temps. 5 utilisations, puis recharge.'],
     ['trophy', 'Chaque élimination fait monter le niveau de la capacité utilisée, jusqu\'au niveau 5.'],
     ['heart', 'Évite l\'eau, les flammes et les araignées. Les sbires noirs et les boss rouges attaquent tout le monde.'],
     ['coin', 'Les pièces achètent des tenues. Ton niveau monte avec tes éliminations (voir les règles), jusqu\'au niveau 10, pour tous tes personnages.']
@@ -448,7 +448,7 @@
       const y = 74 + i * 62; panel(W / 2 - 400, y, 800, 54, { r: 12 });
       if (h[0] === 'joystick') { ctx.strokeStyle = '#9ad8ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2 - 370, y + 27, 16, 0, PI2); ctx.stroke(); ctx.fillStyle = '#9ad8ff'; ctx.beginPath(); ctx.arc(W / 2 - 370, y + 27, 7, 0, PI2); ctx.fill(); }
       else if (h[0] === 'spark') WB.drawIcon(ctx, 'fire', W / 2 - 370, y + 27, 30); else WB.drawIcon(ctx, h[0], W / 2 - 370, y + 27, 30);
-      text(h[1], W / 2 - 340, y + 27, 14.5, '#fff', 'left', 3);
+      const ls = wrapLines(h[1], 730, 13.5), y0 = y + 27 - (ls.length - 1) * 9; ls.forEach(function (l, k) { text(l, W / 2 - 340, y0 + k * 18, 13.5, '#fff', 'left', 3); });
     });
     text('Clavier : ZQSD ou flèches pour bouger, souris pour viser, clic pour la bombe, touches 1 à 6 pour les capacités, P pour la pause.', W / 2, 74 + 6 * 62 + 14, 13.5, '#cfe0ff', 'center', 3);
   };

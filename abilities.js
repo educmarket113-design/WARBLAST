@@ -115,28 +115,27 @@
           if (filled.length) { const k = filled[(Math.random() * filled.length) | 0], lost = best.slots[k]; best.slots[k] = null; g.addPickup({ kind: 'bloc', id: lost.id, lvl: lost.lvl, x: ox, y: oy, noPick: g.t + 1.2 }); g.text(ox, oy - 40, 'Fruit perdu', '#ffb0ff', 16); g.fx('burst', ox, oy, { col: '#e0b0ff', n: 16, life: 0.6 }); if (best === g.player) g.swap = null; }
           if (ab.lvl >= 5) { const left = []; best.slots.forEach((s2, i) => { if (s2 && !s2.stolen) left.push(i); }); if (left.length) { const k2 = left[(Math.random() * left.length) | 0], lost2 = best.slots[k2]; best.slots[k2] = null; g.addPickup({ kind: 'bloc', id: lost2.id, lvl: lost2.lvl, x: ox + 30, y: oy, noPick: g.t + 1.2 }); } }
           if (ab.lvl >= 3) g.status(best, 'stun', 0.5 + 0.2 * ab.lvl);
-          g.teleportRandom(best); g.sfx('tp'); return 5 + ab.lvl * 0;
+          g.teleportRandom(best); g.sfx('tp'); return;
         }
       }
       if (!f.beacon) { f.beacon = { x: f.x, y: f.y }; g.fx('ring', f.x, f.y, { r: 36, col: '#e0b0ff', life: 0.5, w: 4 }); g.sfx('click'); return 1; }
       g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 14, life: 0.5 });
       f.x = f.beacon.x; f.y = f.beacon.y; f.vx = f.vy = 0;
-      g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 14, life: 0.5 }); f.beacon = null; g.sfx('tp'); return 4;
+      g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 14, life: 0.5 }); f.beacon = null; g.sfx('tp');
     },
     ai: { max: L => 120, min: 0, cond: (f, ab, t, d) => (!f.beacon && Math.random() < 0.3) || (f.beacon && f.hp < f.maxhp * 0.4) || d < 110, aimMode: 'tp' }
   });
 
   def('dash', {
-    name: 'Vitesse', col: '#ffd24a', type: 'aim', cd: L => 0.45, range: L => 290, charges: 3,
-    desc: 'Fonce en ligne droite (3 fois de suite) et blesse ce que tu heurtes.',
+    name: 'Vitesse', col: '#ffd24a', type: 'aim', cd: L => 7.5 - 0.3 * L, range: L => 290,
+    desc: 'Fonce en ligne droite et blesse ce que tu heurtes.',
     cast(f, ab, aim) {
-      const g = G(), L = ab.lvl; if (ab.charges <= 0) return false;
+      const g = G(), L = ab.lvl;
       let dx = aim.x, dy = aim.y; if (aim.m < 0.12) { dx = f.face.x; dy = f.face.y; }
       f.dash = { t: 0.17, dx: dx, dy: dy, hit: new Set(), dmg: 20 + 5 * L, L: L };
-      ab.charges--; g.fx('ring', f.x, f.y, { r: 30, col: '#ffe27a', life: 0.3, w: 5 }); g.sfx('dash');
-      return ab.charges > 0 ? 0.45 : 7.5 - 0.3 * L;
+      g.fx('ring', f.x, f.y, { r: 30, col: '#ffe27a', life: 0.3, w: 5 }); g.sfx('dash');
     },
-    ai: { max: L => 290, min: 110, cond: (f, ab, t, d) => ab.charges > 0 }
+    ai: { max: L => 290, min: 110, cond: (f, ab, t, d) => true }
   });
 
   function cone(id, nm, col, desc, silence, dmgf, force, stunf) {
@@ -337,5 +336,5 @@
     let r = Math.random() * tot; for (const k of WB.ABIL_IDS) { r -= WB.ABIL_WEIGHT[k] || 5; if (r <= 0) return k; }
     return 'fire';
   };
-  WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, charges: A[id].charges || 0 }; };
+  WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: 5, gap: 0 }; };
 })(window.WB);

@@ -67,7 +67,7 @@
     for (let k = 1; k <= 5; k++) g.later(k * 0.04, function () { if (!f.alive) return; g.fx('burst', f.x, f.y, { col: '#ffd24a', n: 4, life: 0.4 }); for (const t of g.splash(f, f.x, f.y, 52, 6 + 3 * L, 'dash', {})) { if (L >= 4) { t.st.slowT = 2; t.st.slowMax = 2; t.st.slowAmt = 0.5; } } });
     if (L >= 5) g.later(0.24, function () { if (!f.alive) return; g.fx('ring', f.x, f.y, { r: 140, col: '#ffe27a', life: 0.45, w: 9 }); g.splash(f, f.x, f.y, 140, 30, 'dash', { knock: 620 }); g.shake(5); });
   });
-  A.dash.desc = 'Fonce en ligne droite (3 fois). Niv.3 : traînée qui blesse. Niv.4 : elle ralentit. Niv.5 : onde de choc à l\'arrivée.';
+  A.dash.desc = 'Fonce en ligne droite. Niv.3 : traînée qui blesse. Niv.4 : elle ralentit. Niv.5 : onde de choc à l\'arrivée.';
 
   // invisibilité : niv.3 fumée qui réduit au silence, niv.4 esquive, niv.5 nova d\'ombre
   wrapPost('invis', function (f, ab) {
@@ -87,7 +87,7 @@
     wall: ['Noix de coco', 'Un mur qui bloque tout, ennemis, projectiles et bombes. Il se casse sous les coups.', ['Un mur de 14 s.', 'Mur plus long et plus résistant.', 'Mur double.', 'Mur en U qui piège devant toi.', 'Mur en U et forteresse de 4 murs autour de toi.']],
     shield: ['Pomme verte', 'Aucun dégât subi. Les ennemis que tu touches sont blessés. En équipe, il protège aussi les alliés proches.', ['Protection de 3,1 s.', 'Protection de 3,6 s.', 'Onde de choc à la fin : elle blesse et repousse.', 'L\'onde de choc étourdit aussi 0,9 s.', 'L\'onde de choc te soigne de 15 % de ta vie.']],
     tp: ['Fruit du dragon', 'Pose une balise puis reviens-y. Sur un ennemi, il est téléporté ailleurs et perd un fruit.', ['Balise puis retour à la balise.', 'Explosion à l\'arrivée.', 'Explosion aussi au départ. L\'ennemi téléporté est étourdi.', '1 s d\'invulnérabilité après le retour.', 'L\'ennemi téléporté perd 2 fruits.']],
-    dash: ['Banane', 'Fonce en ligne droite, 3 fois de suite, et blesse ce que tu heurtes.', ['3 élans, chacun blesse.', 'Dégâts de l\'élan augmentés.', 'Laisse une traînée qui blesse.', 'La traînée ralentit les ennemis.', 'Onde de choc à l\'arrivée qui repousse.']],
+    dash: ['Banane', 'Fonce en ligne droite et blesse ce que tu heurtes.', ['Un élan qui blesse ce qu\'il heurte.', 'Dégâts de l\'élan augmentés.', 'Laisse une traînée qui blesse.', 'La traînée ralentit les ennemis.', 'Onde de choc à l\'arrivée qui repousse.']],
     water: ['Pastèque', 'Repousse et réduit au silence : les ennemis ne peuvent plus utiliser de capacités. Dans l\'eau, ils meurent.', ['Un cône d\'eau.', 'Dégâts et silence plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tempête à 360° autour de toi.']],
     wind: ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un cône de vent.', 'Dégâts et étourdissement plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tornade à 360° autour de toi.']],
     scythe: ['Ananas', 'Frappe en arc devant toi.', ['Un coup de faux.', 'Deux coups de suite.', 'Deux coups, portée augmentée.', 'Trois coups en arc très large.', 'Tourbillon de 4 coups à 360°.']],
