@@ -31,7 +31,7 @@
   };
   U.resize = function () {
     const de = document.documentElement;
-    const iw = window.innerWidth || de.clientWidth || 860, ih = window.innerHeight || de.clientHeight || 540;
+    const iw = (cv && cv.clientWidth) || window.innerWidth || de.clientWidth || 860, ih = (cv && cv.clientHeight) || window.innerHeight || de.clientHeight || 540;
     const w = Math.max(320, iw), h = Math.max(240, ih);
     U.dpr = Math.min(2, window.devicePixelRatio || 1); U.seenW = iw; U.seenH = ih; U.seenR = U.dpr;
     U.W = w; U.H = h; cv.width = Math.round(w * U.dpr); cv.height = Math.round(h * U.dpr);
@@ -137,8 +137,8 @@
 
   function topBar(title, back) {
     const W = U.VW; panel(0, 0, W, 54, { r: 0, fill: 'rgba(8,12,30,.85)', stroke: 'rgba(120,150,255,.25)' });
-    if (back) button(10, 8, 54, 40, { icon: 'back', style: 'gray', fn: function () { WB.snd.play('click'); U.go(back); } });
-    if (title) text(title, back ? 78 : 20, 28, 24, '#fff', 'left', 4);
+    if (back) button(12, 5, 58, 44, { icon: 'back', style: 'gray', fn: function () { WB.snd.play('click'); U.go(back); } });
+    if (title) text(title, back ? 82 : 20, 28, 24, '#fff', 'left', 4);
     resBar();
   }
   function resBar() {
@@ -200,8 +200,8 @@
       const l = charLv(i); text(String(l), x + 62, y + 12, 13, '#ffd24a', 'center', 3);
     }
     // onglets
-    const ty = 210; let tx = X0 + 10;
-    for (const t of TABS) { const w = t[0] === 'shoes' ? 80 : t[0] === 'color' ? 64 : 62; button(tx, ty, w - 2, 30, { label: t[1], size: 12, style: charTab === t[0] ? 'gold' : 'dark', fn: function () { charTab = t[0]; WB.snd.play('click'); } }); tx += w + 2; }
+    const ty = 208; let tx = X0 + 10;
+    for (const t of TABS) { const w = t[0] === 'shoes' ? 80 : t[0] === 'color' ? 64 : 62; button(tx, ty, w - 2, 38, { label: t[1], size: 12, style: charTab === t[0] ? 'gold' : 'dark', fn: function () { charTab = t[0]; WB.snd.play('click'); } }); tx += w + 2; }
     // contenu
     const cy0 = 250;
     panel(X0 + 6, cy0 - 4, 410, H - cy0 - 8, { r: 10, fill: 'rgba(10,14,34,.7)' });
@@ -292,7 +292,7 @@
       const lv = charLv(U.save.spec.char);
       panel(X0 + 20, 392, 820, 46, { r: 12 }); text('Ton personnage est niveau ' + lv + '. Tu as ' + WB.slotCount(lv) + ' case' + (lv > 1 ? 's' : '') + ' de capacité. Les trophées servent à monter de niveau.', X0 + 430, 415, 14, '#cfe0ff', 'center', 3);
     }
-    button(W / 2 - 200, H - 76, 400, 64, { label: 'LANCER LA PARTIE', style: 'red', size: 30, fn: function () { U.startGame(); } });
+    button(W / 2 - 200, H - 86, 400, 64, { label: 'LANCER LA PARTIE', style: 'red', size: 30, fn: function () { U.startGame(); } });
     drawToast();
   };
 
@@ -335,7 +335,7 @@
   // ---------- boucle d'affichage des écrans ----------
   U.frame = function (dt, time) {
     // revérifie la taille réelle de l'écran à chaque image : sans cela, une rotation dont l'événement est perdu laisse le jeu bloqué sur l'écran « Tourne ton appareil »
-    if (window.innerWidth !== U.seenW || window.innerHeight !== U.seenH) U.resize();
+    if ((cv.clientWidth || window.innerWidth) !== U.seenW || (cv.clientHeight || window.innerHeight) !== U.seenH) U.resize();
     U.t += dt; if (U.toast) { U.toast.t -= dt; if (U.toast.t <= 0) U.toast = null; }
     ctx.setTransform(U.dpr, 0, 0, U.dpr, 0, 0);
     ctx.clearRect(0, 0, U.W, U.H);
@@ -363,7 +363,16 @@
 
   // ---------- pointeurs ----------
   U.touches = {};
-  function findBtn(x, y) { for (let i = btns.length - 1; i >= 0; i--) { const b = btns[i]; if (!b.off && x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b; } return null; }
+  function findBtn(x, y) {
+    // zone de toucher : au moins 44 px réels de côté (marge ajoutée autour des petits boutons, 6 unités au plus)
+    const need = 44 / U.S;
+    for (let i = btns.length - 1; i >= 0; i--) {
+      const b = btns[i]; if (b.off) continue;
+      const sx = b.w < need ? Math.min(10, (need - b.w) / 2) : 0, sy = b.h < need ? Math.min(10, (need - b.h) / 2) : 0;
+      if (x >= b.x - sx && x <= b.x + b.w + sx && y >= b.y - sy && y <= b.y + b.h + sy) return b;
+    }
+    return null;
+  }
   U.findBtn = findBtn;
   U.setButtons = function (l) { btns = l; };
   function onPointer(kind, e) {
@@ -379,6 +388,7 @@
   U.pressedBtn = function () { return pressed; };
   U.setPressed = function (b) { pressed = b; };
   U.getHover = function () { return hover; };
+  U.buttons = function () { return btns; };
   U.mouse = function () { return { x: mouseX, y: mouseY }; };
   U.ctxTransform = function () { ctx.save(); ctx.scale(U.S, U.S); btns = []; };
   U.resetBtns = function () { btns = []; hover = null; };
