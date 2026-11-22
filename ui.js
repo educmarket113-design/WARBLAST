@@ -292,7 +292,7 @@
       const lv = charLv(U.save.spec.char);
       panel(X0 + 20, 392, 820, 46, { r: 12 }); text('Ton personnage est niveau ' + lv + '. Tu as ' + WB.slotCount(lv) + ' case' + (lv > 1 ? 's' : '') + ' de capacité. Les trophées servent à monter de niveau.', X0 + 430, 415, 14, '#cfe0ff', 'center', 3);
     }
-    button(W / 2 - 150, H - 74, 300, 62, { label: 'COMBATTRE', style: 'red', size: 32, fn: function () { U.startGame(); } });
+    button(W / 2 - 200, H - 76, 400, 64, { label: 'LANCER LA PARTIE', style: 'red', size: 30, fn: function () { U.startGame(); } });
     drawToast();
   };
 

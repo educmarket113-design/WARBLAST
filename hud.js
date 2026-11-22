@@ -51,7 +51,7 @@
   U.chainMode = false; U.chainSel = [];
   U.onKey = function (e) {
     const G = WB.G, k = (e.key || '').toLowerCase();
-    if (U.screen !== 'game' || !G) { if (U.screen === 'title' && (k === 'enter' || k === ' ')) { WB.snd.unlock(); U.go('menu'); } return; }
+    if (U.screen !== 'game' || !G) { if (U.screen === 'title' && (k === 'enter' || k === ' ')) { WB.snd.unlock(); U.go('menu'); } else if (U.screen === 'play' && k === 'enter') { U.startGame(); } return; }
     if (k === 'p' || k === 'escape') { U.setPause(!U.paused); return; }
     if (U.paused || G.over) return;
     lastType = 'mouse';
