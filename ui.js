@@ -12,8 +12,14 @@
     cv = U.cv = canvas; ctx = U.ctx = canvas.getContext('2d'); U.save = save;
     WB.snd.setEnabled(save.sound !== false);
     U.resize();
+    // L'orientation d'un téléphone change parfois sans événement fiable ou avec des valeurs périmées :
+    // on écoute tous les signaux possibles et on revérifie à chaque image (voir U.frame).
     window.addEventListener('resize', U.resize);
-    window.addEventListener('orientationchange', function () { setTimeout(U.resize, 200); });
+    window.addEventListener('orientationchange', function () { U.resize(); [100, 300, 700, 1500].forEach(function (d) { setTimeout(U.resize, d); }); });
+    window.addEventListener('pageshow', U.resize);
+    document.addEventListener('fullscreenchange', function () { U.resize(); setTimeout(U.resize, 300); });
+    try { if (window.visualViewport) window.visualViewport.addEventListener('resize', U.resize); } catch (e) {}
+    try { if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', function () { [0, 300, 900].forEach(function (d) { setTimeout(U.resize, d); }); }); } catch (e) {}
     cv.addEventListener('pointerdown', function (e) { e.preventDefault(); try { cv.setPointerCapture(e.pointerId); } catch (x) {} onPointer('down', e); });
     cv.addEventListener('pointermove', function (e) { e.preventDefault(); onPointer('move', e); });
     cv.addEventListener('pointerup', function (e) { e.preventDefault(); onPointer('up', e); });
@@ -21,8 +27,10 @@
     cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
   };
   U.resize = function () {
-    const w = Math.max(320, window.innerWidth), h = Math.max(240, window.innerHeight);
-    U.dpr = Math.min(2, window.devicePixelRatio || 1);
+    const de = document.documentElement;
+    const iw = window.innerWidth || de.clientWidth || 860, ih = window.innerHeight || de.clientHeight || 540;
+    const w = Math.max(320, iw), h = Math.max(240, ih);
+    U.dpr = Math.min(2, window.devicePixelRatio || 1); U.seenW = iw; U.seenH = ih; U.seenR = U.dpr;
     U.W = w; U.H = h; cv.width = Math.round(w * U.dpr); cv.height = Math.round(h * U.dpr);
     U.S = Math.min(h / 540, w / 860); U.VW = w / U.S; U.VH = h / U.S;
   };
@@ -323,6 +331,8 @@
 
   // ---------- boucle d'affichage des écrans ----------
   U.frame = function (dt, time) {
+    // revérifie la taille réelle de l'écran à chaque image : sans cela, une rotation dont l'événement est perdu laisse le jeu bloqué sur l'écran « Tourne ton appareil »
+    if (window.innerWidth !== U.seenW || window.innerHeight !== U.seenH) U.resize();
     U.t += dt; if (U.toast) { U.toast.t -= dt; if (U.toast.t <= 0) U.toast = null; }
     ctx.setTransform(U.dpr, 0, 0, U.dpr, 0, 0);
     ctx.clearRect(0, 0, U.W, U.H);
@@ -339,6 +349,7 @@
       ctx.rotate(Math.sin(time * 2) * 0.35 - Math.PI / 2 * 0); ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; rr(ctx, -50, -80, 100, 160, 14); ctx.stroke();
       ctx.restore();
       ctx.font = 'bold 20px ' + FONT; ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.fillText('Tourne ton appareil en mode paysage', U.W / 2, U.H / 2 + Math.min(U.W, U.H) * 0.4);
+      ctx.font = '15px ' + FONT; ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillText('Le jeu démarre tout seul dès que l\'écran est à l\'horizontale', U.W / 2, U.H / 2 + Math.min(U.W, U.H) * 0.4 + 28);
     }
   };
 
@@ -357,6 +368,7 @@
     if (e.pointerType === 'touch') WB.input.touch = true;
     if (e.pointerType === 'mouse') { mouseX = x; mouseY = y; U.mousePx = px; U.mousePy = py; }
     if (kind === 'down') WB.snd.unlock();
+    if (U.H > U.W * 1.05) { if (kind === 'down') { U.resize(); U.tryLandscape(); } return; }
     if (U.screen === 'game' || U.screen === 'results') { U.gamePointer(kind, e, px, py, x, y); return; }
     if (kind === 'down') { pressed = findBtn(x, y); if (U.screen === 'title' && !pressed) { WB.snd.unlock(); U.tryLandscape(); U.go('menu'); } }
     else if (kind === 'up') { const b = pressed; pressed = null; if (b && findBtn(x, y) === b && b.fn) { if (b.snd !== false) WB.snd.play('click'); b.fn(); } }
