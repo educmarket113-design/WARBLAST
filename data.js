@@ -82,7 +82,9 @@ window.WB = window.WB || {};
   WB.abilProgress = function (ab) { if (ab.lvl >= 5) return 1; const a = WB.abilXp[ab.lvl - 1], b = WB.abilXp[ab.lvl]; return Math.min(1, (ab.lvl - 1 + Math.max(0, Math.min(1, (ab.kills - a) / (b - a)))) / 4); };
   WB.slotCount = function (lv) { return Math.min(lv, 6); };
   WB.chainMax = function (lv) { return lv >= 7 ? lv - 5 : 1; };
-  WB.xpNeed = function (lv) { return 100 * lv; };
+  // éliminations nécessaires pour passer du niveau n au niveau n+1, comptées uniquement dans cet intervalle
+  WB.LEVEL_KILLS = [100, 200, 200, 300, 300, 400, 450, 600, 1000];
+  WB.xpNeed = function (lv) { return WB.LEVEL_KILLS[lv - 1] || 0; };
   WB.trophyCost = function (lv) { return 4 * lv; };
   WB.abilXp = [0, 3, 7, 12, 18]; // kills needed for ability level 1..5
 

@@ -81,7 +81,7 @@
   function defaults() {
     const chars = {};
     for (let i = 0; i < WB.CHARS.length; i++) chars[i] = { lvl: 1, xp: 0 };
-    return { v: 2, level: 1, coins: 0, trophies: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, music: true, sfxVol: 1, musVol: 0.6, duration: 240, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
+    return { v: 2, level: 1, coins: 0, trophies: 0, lvKills: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, music: true, sfxVol: 1, musVol: 0.6, duration: 240, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
   }
   WB.defaultSave = defaults;
 

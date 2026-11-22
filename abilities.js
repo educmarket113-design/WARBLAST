@@ -113,6 +113,8 @@
           // la victime perd un de ses fruits : il tombe là où elle se trouvait
           const ox = best.x, oy = best.y, filled = []; best.slots.forEach((s, i) => { if (s && !s.stolen) filled.push(i); });
           if (filled.length) { const k = filled[(Math.random() * filled.length) | 0], lost = best.slots[k]; best.slots[k] = null; g.addPickup({ kind: 'bloc', id: lost.id, lvl: lost.lvl, x: ox, y: oy, noPick: g.t + 1.2 }); g.text(ox, oy - 40, 'Fruit perdu', '#ffb0ff', 16); g.fx('burst', ox, oy, { col: '#e0b0ff', n: 16, life: 0.6 }); if (best === g.player) g.swap = null; }
+          if (ab.lvl >= 5) { const left = []; best.slots.forEach((s2, i) => { if (s2 && !s2.stolen) left.push(i); }); if (left.length) { const k2 = left[(Math.random() * left.length) | 0], lost2 = best.slots[k2]; best.slots[k2] = null; g.addPickup({ kind: 'bloc', id: lost2.id, lvl: lost2.lvl, x: ox + 30, y: oy, noPick: g.t + 1.2 }); } }
+          if (ab.lvl >= 3) g.status(best, 'stun', 0.5 + 0.2 * ab.lvl);
           g.teleportRandom(best); g.sfx('tp'); return 5 + ab.lvl * 0;
         }
       }
@@ -141,17 +143,23 @@
     def(id, {
       name: nm, col: col, type: 'aim', cd: L => 6.5 - 0.2 * L - (silence ? 0 : 1), range: L => 270 + (L >= 4 ? 70 : 0), desc: desc,
       cast(f, ab, aim) {
-        const g = G(), L = ab.lvl, R = A[id].range(L), half = L >= 4 ? 0.8 : 0.55, base = Math.atan2(aim.y, aim.x);
-        g.fx('wave', f.x, f.y, { ang: base, r: R, half: half, col: col, life: 0.45 });
-        for (const t of g.enemiesIn(f, f.x, f.y, R)) {
-          const a = Math.atan2(t.y - f.y, t.x - f.x);
-          if (angDiff(a, base) > half && Math.hypot(t.x - f.x, t.y - f.y) > 60) continue;
-          g.damage(t, dmgf(L), f, id);
-          g.knock(t, Math.cos(a), Math.sin(a), force);
-          if (silence) g.status(t, 'silence', 2 + 0.4 * L);
-          if (stunf) g.status(t, 'stun', stunf(L));
-        }
-        g.sfx(id === 'water' ? 'water' : 'wind');
+        const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x);
+        // niv.1-2 : un cône. niv.3 : deuxième vague plus large. niv.4 : cône très large, trois vagues. niv.5 : tempête sur 360°
+        const R = A[id].range(L), half = L >= 5 ? Math.PI : L >= 4 ? 1.0 : 0.55, waves = L >= 4 ? 3 : L >= 3 ? 2 : 1;
+        const wave = function (k) {
+          if (!f.alive) return; const RR = R + 40 * k, hh = Math.min(Math.PI, half + 0.15 * k);
+          g.fx('wave', f.x, f.y, { ang: base, r: RR, half: hh, col: col, life: 0.45 });
+          for (const t of g.enemiesIn(f, f.x, f.y, RR)) {
+            const a = Math.atan2(t.y - f.y, t.x - f.x);
+            if (hh < Math.PI && angDiff(a, base) > hh && Math.hypot(t.x - f.x, t.y - f.y) > 60) continue;
+            g.damage(t, dmgf(L) * (k ? 0.6 : 1), f, id);
+            g.knock(t, Math.cos(a), Math.sin(a), force * (k ? 0.6 : 1));
+            if (silence) g.status(t, 'silence', 2 + 0.4 * L);
+            if (stunf) g.status(t, 'stun', stunf(L));
+          }
+          g.sfx(id === 'water' ? 'water' : 'wind');
+        };
+        wave(0); for (let k = 1; k < waves; k++) g.later(0.3 * k, function () { wave(k); });
       },
       ai: { max: L => 250, min: 0 }
     });
@@ -161,11 +169,11 @@
 
   def('scythe', {
     name: 'Faux de la mort', col: '#dfe6f2', type: 'aim', cd: L => 5, range: L => 120,
-    desc: 'Deux coups de faux dans la direction visée. Au niveau 5 : tour complet (360°).',
+    desc: 'Coups de faux : 1 au niveau 1, 2 au niveau 2, 3 au niveau 4, un tourbillon de 4 coups sur 360° au niveau 5.',
     cast(f, ab, aim) {
-      const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x), R = L >= 5 ? 150 : 105 + 6 * L, half = L >= 5 ? Math.PI : 1.0;
+      const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x), R = L >= 5 ? 160 : 100 + 10 * L, half = L >= 5 ? Math.PI : L >= 4 ? 1.6 : 1.0, swings = [1, 2, 2, 3, 4][L - 1];
       const swing = (side) => { if (!f.alive) return; g.arcHit(f, f.x, f.y, R, base, half, 24 + 5 * L, 'scythe'); g.fx('arc', f.x, f.y, { ang: base, r: R, half: half, side: side, life: 0.28, col: '#e8f0ff' }); g.sfx('swing'); };
-      swing(1); g.later(0.5, () => swing(-1));
+      for (let k = 0; k < swings; k++) { if (k === 0) swing(1); else g.later(0.38 * k, () => swing(k % 2 ? -1 : 1)); }
     },
     ai: { max: L => 120, min: 0 }
   });
@@ -185,7 +193,7 @@
       for (let i = 0; i < n; i++) {
         const a = base + (i - (n - 1) / 2) * 0.22;
         g.proj({ x: f.x, y: f.y, dx: Math.cos(a), dy: Math.sin(a), speed: 480, life: 0.8, r: 14, owner: f, ab: 'spider', lvl: L, kind: 'web',
-          onHit(p, t) { const dur = 1.4 + 0.25 * L; g.damage(t, 4, f, 'spider'); g.status(t, 'root', dur); g.dotFlat(t, 18 + 7 * L, dur, f, 'spider'); t.st.afterRoot = 3; g.fx('web', t.x, t.y, { life: dur, t: t }); return true; } });
+          onHit(p, t) { const dur = 1.4 + 0.25 * L; g.damage(t, 4, f, 'spider'); g.status(t, 'root', dur); g.dotFlat(t, 18 + 7 * L, dur, f, 'spider'); t.st.afterRoot = 3; g.fx('web', t.x, t.y, { life: dur, t: t }); if (L >= 4) { const o2 = g.enemiesIn(f, t.x, t.y, 210).filter(q => q !== t)[0]; if (o2) { g.fx('chain', t.x, t.y, { x2: o2.x, y2: o2.y, life: 0.3, col: '#c8a0ff' }); g.status(o2, 'root', dur * 0.7); g.dotFlat(o2, 12 + 5 * L, dur * 0.7, f, 'spider'); o2.st.afterRoot = 2; g.fx('web', o2.x, o2.y, { life: dur * 0.7, t: o2 }); } } return true; } });
       }
       g.sfx('web');
     },
@@ -212,12 +220,14 @@
     desc: 'Lance de mort : elle traverse les murs en perdant de la portée. L\'ennemi touché devient ton esclave et prend les coups à ta place.',
     cast(f, ab, aim) {
       const g = G(), L = ab.lvl, R = 400 + 30 * L;
-      g.proj({ x: f.x, y: f.y, dx: aim.x, dy: aim.y, speed: 640, life: R / 640, r: 12, owner: f, ab: 'necro', lvl: L, kind: 'spear', pierce: true,
+      const nsp = L >= 5 ? 3 : L >= 3 ? 2 : 1, b0 = Math.atan2(aim.y, aim.x);
+      for (let i = 0; i < nsp; i++) { const a2 = b0 + (i - (nsp - 1) / 2) * 0.3;
+      g.proj({ x: f.x, y: f.y, dx: Math.cos(a2), dy: Math.sin(a2), speed: 640, life: R / 640, r: 12, owner: f, ab: 'necro', lvl: L, kind: 'spear', pierce: true,
         onHit(p, t) {
           g.damage(t, 10 + 3 * L, f, 'necro');
           if ((t.kind === 'player' || t.kind === 'bot') && t.alive && !t.thrall) g.enthrall(f, t, L); else g.fx('burst', t.x, t.y, { col: '#8affc8', n: 10, life: 0.45 });
           return true;
-        } });
+        } }); }
       g.sfx('spear');
     },
     ai: { max: L => 400 + 30 * L, min: 60 }
@@ -250,7 +260,7 @@
 
   def('bolt', {
     name: 'Électricité', col: '#ffe94a', type: 'aim', cd: L => 6.5 - 0.2 * L, range: L => 450,
-    desc: 'Fait tomber la foudre : dégâts et impossibilité d\'utiliser les capacités.',
+    desc: 'Foudre : dégâts et silence. Niv.3 : l\'éclair saute à un ennemi proche. Niv.4 : deuxième coup. Niv.5 : tempête de 3 éclairs et 2 rebonds.',
     cast(f, ab, aim) {
       const g = G(), L = ab.lvl, R = A.bolt.range(L), px = f.x + aim.x * R * Math.max(aim.m, 0.3), py = f.y + aim.y * R * Math.max(aim.m, 0.3);
       let tg = null, bd = 170;
@@ -266,6 +276,9 @@
           const nmax = L >= 5 ? 2 : 1; let c = 0;
           for (const t of g.enemiesIn(f, sx, sy, 190)) { if (hits.includes(t) || c >= nmax) continue; c++; g.fx('chain', sx, sy, { x2: t.x, y2: t.y, life: 0.3 }); g.damage(t, 15 + 4 * L, f, 'bolt'); g.status(t, 'silence', 1); }
         }
+        const strike = function (x, y, dmg) { if (!f.alive) return; g.fx('bolt', x, y, { life: 0.3 }); g.shake(3); g.sfx('zap'); for (const t of g.enemiesIn(f, x, y, 56)) { g.damage(t, dmg, f, 'bolt'); g.status(t, 'silence', 1); } };
+        if (L >= 4) g.later(0.45, function () { strike(sx, sy, 20 + 6 * L); });
+        if (L >= 5) for (let k = 0; k < 3; k++) g.later(0.25 + 0.22 * k, function () { const a = Math.random() * 6.283, d = 70 + Math.random() * 90; strike(sx + Math.cos(a) * d, sy + Math.sin(a) * d, 18); });
       });
     },
     ai: { max: L => 450, min: 0 }

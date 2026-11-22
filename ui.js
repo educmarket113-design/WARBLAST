@@ -292,12 +292,13 @@
     for (let i = 0; i < 6; i++) { if (i >= n) break; ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(sx + i * (sw + gap) + sw / 2, py + 176, sw / 2 - 2, 0, PI2); ctx.stroke(); ctx.setLineDash([]); }
     if (WB.chainMax(lv) > 1) text('Enchaîne ' + WB.chainMax(lv) + ' capacités', px, py + 204, 14, '#ffb0ff', 'center', 3);
     // montée de niveau
-    const cost = WB.trophyCost(lv);
     if (lv < WB.MAXLV) {
-      const can = s.trophies >= cost;
-      button(px - 130, py + 218, 260, 50, { label: 'Monter au niveau ' + (lv + 1), sub: cost + ' trophées', style: can ? 'gold' : 'gray', size: 17, off: !can, fn: function () {
-        if (s.trophies >= cost) { s.trophies -= cost; s.level = lv + 1; U.commit(); WB.snd.play('levelup'); U.showToast('Ton niveau passe à ' + (lv + 1), '#ffe27a'); }
-      } });
+      const need = WB.xpNeed(lv), have = Math.min(need, s.lvKills || 0), bw = 300, bx = px - bw / 2, by = py + 224;
+      text('Éliminations du niveau ' + lv + ' au niveau ' + (lv + 1), px, by - 12, 14, '#dfe8ff', 'center', 3);
+      ctx.fillStyle = 'rgba(8,12,34,.7)'; U.rr(ctx, bx, by, bw, 22, 11); ctx.fill();
+      if (have > 0) { ctx.fillStyle = '#ffd24a'; U.rr(ctx, bx, by, Math.max(22, bw * have / need), 22, 11); ctx.fill(); }
+      ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; U.rr(ctx, bx, by, bw, 22, 11); ctx.stroke();
+      text(have + ' / ' + need, px, by + 12, 14, '#fff', 'center', 3);
     } else text('Niveau maximum', px, py + 242, 18, '#9dffb0', 'center', 4);
     if (WB.sdk.rewardedSupported()) button(px - 130, py + 276, 260, 44, { label: '+40 pièces', sub: 'vidéo', icon: 'coin', style: 'dark', size: 16, fn: function () { U.rewardCoins(40, 'shop_coins'); } });
     drawToast();
@@ -342,10 +343,10 @@
       } });
     });
     // durée de la partie : 3, 4 ou 5 minutes au choix du joueur
-    text('Durée', X0 + 150, 410, 20, '#cfe0ff', 'center', 4);
+    text('Durée', X0 + 150, 402, 20, '#cfe0ff', 'center', 4);
     [180, 240, 300].forEach(function (d, i) {
       const on = (U.save.duration || 240) === d;
-      button(X0 + 250 + i * 190, 388, 170, 44, { label: (d / 60) + ' min', style: on ? 'green' : 'dark', sel: on, size: 22, fn: function () { U.save.duration = d; U.commit(); WB.snd.play('click'); } });
+      button(X0 + 250 + i * 190, 380, 170, 44, { label: (d / 60) + ' min', style: on ? 'green' : 'dark', sel: on, size: 22, fn: function () { U.save.duration = d; U.commit(); WB.snd.play('click'); } });
     });
     if (fr) text('Salon ' + U.friend.code + '. Le jeu en ligne demande un serveur, absent de cette version : la partie se joue contre des bots.', X0 + 430, H - 100, 12.5, '#cfe0ff', 'center', 3);
     else text('Ton niveau est ' + charLv() + ' (le même pour tous tes personnages) : ' + WB.slotCount(charLv()) + ' case' + (charLv() > 1 ? 's' : '') + ' de capacité.', X0 + 430, H - 100, 12.5, '#cfe0ff', 'center', 3);
@@ -378,20 +379,71 @@
     audioRow(158, 'Musique', 'bolt', 'music', 'musVol', function () { U.applyAudio(); });
     panel(X0 + 80, 240, 700, 70, { r: 16 }); text('Pseudo', X0 + 120, 275, 22, '#fff', 'left', 4);
     button(X0 + 330, 251, 420, 48, { label: s.name, sub: 'Modifier mon nom', style: 'blue', size: 18, fn: function () { U.editName(); } });
-    panel(X0 + 80, 322, 700, 70, { r: 16 }); text('Aide', X0 + 120, 357, 22, '#fff', 'left', 4);
-    button(X0 + 330, 333, 420, 48, { label: 'Comment jouer', style: 'gray', size: 20, fn: function () { U.go('help'); } });
+    panel(X0 + 80, 322, 700, 70, { r: 16 });
+    button(X0 + 94, 333, 212, 48, { label: 'Règles du jeu', style: 'gray', size: 18, fn: function () { U.go('rules'); } });
+    button(X0 + 324, 333, 212, 48, { label: 'Les pouvoirs', style: 'gold', size: 18, fn: function () { U.go('powers'); } });
+    button(X0 + 554, 333, 212, 48, { label: 'Commandes', style: 'gray', size: 18, fn: function () { U.go('help'); } });
     text('Warblast 1.0', W / 2, 424, 15, 'rgba(210,225,255,.55)', 'center', 3);
   };
+  // texte découpé en lignes pour rester dans son cadre
+  function wrapLines(str, maxW, size) {
+    ctx.font = 'bold ' + size + 'px ' + FONT; const words = String(str).split(' '), out = []; let line = '';
+    for (const w of words) { const t = line ? line + ' ' + w : w; if (ctx.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; }
+    if (line) out.push(line); return out;
+  }
+  U.wrapLines = wrapLines;
+  function paragraph(str, x, y, maxW, size, col, lh) { const ls = wrapLines(str, maxW, size); ls.forEach(function (l, i) { text(l, x, y + i * lh, size, col || '#fff', 'left', 3); }); return ls.length * lh; }
+
+  const RULES = [
+    ['But du jeu', 'Tu combats sur une arène contre des bots : chacun pour soi, 2 équipes de 5 ou 3 équipes de 3. Chaque élimination rapporte un point. À la fin du temps choisi (3, 4 ou 5 minutes), le meilleur score, ou la meilleure équipe, gagne.'],
+    ['Combat', 'Tu as 300 points de vie au niveau 1 et 5 bombes par partie. Ramasse les cœurs pour te soigner. Une pression sur la bombe ou sur une capacité vise l\'ennemi le plus proche. Évite l\'eau, le feu, les araignées, les sbires noirs et les boss rouges.'],
+    ['Fruits et capacités', 'Les fruits au sol donnent une capacité dans une case libre. Chaque élimination avec une capacité la fait monter de niveau, jusqu\'au niveau 5 : à chaque niveau le pouvoir change vraiment (voir « Les pouvoirs »).'],
+    ['Niveau du profil', 'Ton niveau va de 1 à 10 et vaut pour tous tes personnages. Il monte avec tes éliminations, comptées seulement entre deux niveaux : 100, 200, 200, 300, 300, 400, 450, 600 puis 1 000. Chaque niveau donne plus de cases de capacité, de l\'enchaînement et des fruits de départ plus forts.']
+  ];
+  screens.rules = function (time) {
+    const W = U.VW, X0 = (W - 860) / 2; bg(time); topBar('Règles du jeu', 'settings');
+    RULES.forEach(function (r, i) {
+      const x = X0 + 20 + (i % 2) * 420, y = 70 + Math.floor(i / 2) * 200, w = 400, h = 188;
+      panel(x, y, w, h, { r: 14 }); text(r[0], x + 16, y + 24, 19, '#ffd24a', 'left', 4);
+      paragraph(r[1], x + 16, y + 52, w - 32, 13.5, '#fff', 19);
+    });
+    const need = WB.LEVEL_KILLS, tx = X0 + 20, ty = 470;
+    text('Éliminations par niveau :', tx, ty, 14, '#cfe0ff', 'left', 3); text(need.map(function (n, i) { return (i + 1) + '→' + (i + 2) + ' : ' + n; }).join('   '), tx, ty + 22, 12, '#dfe8ff', 'left', 3);
+  };
+
+  let powSel = 'ice';
+  screens.powers = function (time) {
+    const W = U.VW, X0 = (W - 860) / 2; bg(time); topBar('Système des pouvoirs', 'settings');
+    const ids = WB.ABIL_IDS, cs = 62;
+    ids.forEach(function (id, i) {
+      const x = X0 + 14 + (i % 5) * (cs + 6), y = 66 + Math.floor(i / 5) * (cs + 6), on = id === powSel;
+      button(x, y, cs, cs, { style: on ? 'gold' : 'dark', sel: on, fn: function () { powSel = id; WB.snd.play('click'); }, draw: function (cx, cy) { WB.drawFruit(ctx, id, cx, cy + 1, 38, time); } });
+    });
+    const gd = WB.GUIDE[powSel], ab = WB.ABIL[powSel], px = X0 + 360, py = 62, pw = 490, ph = 440;
+    panel(px, py, pw, ph, { r: 14, stroke: ab.col });
+    WB.drawFruit(ctx, powSel, px + 40, py + 42, 52, time); WB.drawIcon(ctx, powSel, px + pw - 40, py + 40, 40);
+    text(ab.name, px + 78, py + 26, 22, '#fff', 'left', 4); text(gd[0], px + 78, py + 50, 13.5, '#ffe9a8', 'left', 3);
+    let y = py + 82; y += paragraph(gd[1], px + 16, y, pw - 32, 13, '#dfe8ff', 17) + 6;
+    for (let L = 0; L < 5; L++) {
+      const ls = wrapLines(gd[2][L], pw - 86, 12.5), h = Math.max(30, ls.length * 16 + 10);
+      ctx.fillStyle = 'rgba(255,255,255,.06)'; U.rr(ctx, px + 10, y - 2, pw - 20, h, 8); ctx.fill();
+      ctx.fillStyle = L === 4 ? '#ff9a3c' : ab.col; ctx.beginPath(); ctx.arc(px + 32, y + h / 2 - 2, 14, 0, PI2); ctx.fill(); text(String(L + 1), px + 32, y + h / 2 - 1, 15, '#10162e', 'center');
+      ls.forEach(function (l, i) { text(l, px + 56, y + 9 + i * 16, 12.5, '#fff', 'left', 3); });
+      y += h + 4;
+    }
+    text('Choisis un fruit pour voir ses 5 niveaux.', X0 + 14 + 160, 66 + 4 * (cs + 6) + 12, 12.5, '#cfe0ff', 'center', 3);
+  };
+
   const HELP = [
-    ['joystick', 'Stick gauche : se déplacer. Stick droit : viser. En le relâchant tu lances une bombe.'],
-    ['bomb', 'Tu as 5 bombes par partie. Elles ne reviennent jamais, garde-les pour les bons moments.'],
-    ['spark', 'Ramasse les blocs au sol pour remplir tes cases vides, en bas de l\'écran. Touche une case pour lancer la capacité.'],
+    ['joystick', 'Stick à gauche : se déplacer. Il n\'y a plus de stick de visée : tout se vise tout seul sur l\'ennemi le plus proche.'],
+    ['bomb', 'Bouton bombe, en bas à droite : une pression lance une bombe sur l\'ennemi le plus proche. Tu en as 5 par partie.'],
+    ['spark', 'Ramasse les blocs au sol pour remplir tes cases vides, en bas de l\'écran. Les cases sont en bas à droite : une pression lance la capacité.'],
     ['trophy', 'Chaque élimination fait monter le niveau de la capacité utilisée, jusqu\'au niveau 5.'],
     ['heart', 'Évite l\'eau, les flammes et les araignées. Les sbires noirs et les boss rouges attaquent tout le monde.'],
-    ['coin', 'Les pièces achètent des tenues. Les trophées de fin de partie font monter ton niveau jusqu\'à 10, quel que soit le personnage que tu joues.']
+    ['coin', 'Les pièces achètent des tenues. Ton niveau monte avec tes éliminations (voir les règles), jusqu\'au niveau 10, pour tous tes personnages.']
   ];
   screens.help = function (time) {
-    const W = U.VW; bg(time); topBar('Comment jouer', U.screen === 'help' && U.prev === 'game' ? 'game' : 'menu');
+    const W = U.VW; bg(time); topBar('Commandes', 'settings');
     HELP.forEach(function (h, i) {
       const y = 74 + i * 62; panel(W / 2 - 400, y, 800, 54, { r: 12 });
       if (h[0] === 'joystick') { ctx.strokeStyle = '#9ad8ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W / 2 - 370, y + 27, 16, 0, PI2); ctx.stroke(); ctx.fillStyle = '#9ad8ff'; ctx.beginPath(); ctx.arc(W / 2 - 370, y + 27, 7, 0, PI2); ctx.fill(); }

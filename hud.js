@@ -3,7 +3,7 @@
   const U = WB.ui, A = WB.ABIL, PI2 = Math.PI * 2, FONT = '"Trebuchet MS","Segoe UI",Arial,sans-serif';
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const I = WB.input;
-  const sticks = U.sticks = { move: null, aim: null };
+  const sticks = U.sticks = { move: null };
   let lastType = 'mouse', resultsT = 0;
 
   // ---------- icônes d'interface supplémentaires ----------
@@ -42,7 +42,7 @@
   // ---------- pause ----------
   U.setPause = function (v) {
     const G = WB.G; if (!G || G.over || U.screen !== 'game') return;
-    if (v === U.paused) return; U.paused = v; I.reset(); sticks.move = sticks.aim = null;
+    if (v === U.paused) return; U.paused = v; I.reset(); sticks.move = null;
     if (G.started) WB.sdk.msg(v ? 'gameplay_stopped' : 'gameplay_started');
   };
   document.addEventListener('visibilitychange', function () { if (document.hidden) U.setPause(true); });
@@ -65,7 +65,7 @@
 
   function curAim(f, ab) {
     const G = WB.G;
-    if (I.aim.active && I.aim.m > 0.08) return { x: I.aim.x, y: I.aim.y, m: Math.max(0.3, I.aim.m) };
+    if (lastType === 'mouse' && I.aim.active && I.aim.m > 0.08) return { x: I.aim.x, y: I.aim.y, m: Math.max(0.3, I.aim.m) };
     return ab ? G.autoAim(f, ab) : { x: f.aimLast.x, y: f.aimLast.y, m: 0.6 };
   }
   function castSlot(i) {
@@ -75,25 +75,25 @@
     const ab = f.slots[i]; if (!ab || (ab.id === 'summon' && !ab.form)) { WB.snd.play('hit'); return; }
     if (U.chainMode) { const p = U.chainSel.indexOf(i); if (p >= 0) U.chainSel.splice(p, 1); else if (U.chainSel.length < WB.chainMax(f.level)) U.chainSel.push(i); WB.snd.play('click'); return; }
     const aim = curAim(f, ab);
-    if (WB.G.useSlot(f, i, aim) && sticks.aim) sticks.aim.cast = true;
+    WB.G.useSlot(f, i, aim);
   }
   function fireChain() {
     const G = WB.G, f = G.player; if (!U.chainSel.length || !f.alive) return;
     const first = f.slots[U.chainSel[0]]; const aim = curAim(f, first);
-    G.chain(f, U.chainSel.slice(), aim); if (sticks.aim) sticks.aim.cast = true; U.chainSel = []; U.chainMode = false;
+    G.chain(f, U.chainSel.slice(), aim); U.chainSel = []; U.chainMode = false;
   }
   function throwBomb(aim) {
     const G = WB.G, f = G.player; if (!G.started || G.over || f.thrall) return;
-    const a = aim || (I.aim.active ? { x: I.aim.x, y: I.aim.y, m: Math.max(0.3, I.aim.m) } : { x: f.aimLast.x, y: f.aimLast.y, m: 0.65 });
+    let a = aim; if (!a && lastType !== 'mouse') { const t = G.nearest(f, 400); if (t) { const d = Math.hypot(t.x - f.x, t.y - f.y) || 1; a = { x: (t.x - f.x) / d, y: (t.y - f.y) / d, m: clamp(d / 400, 0.2, 1) }; } }
+    if (!a) a = I.aim.active ? { x: I.aim.x, y: I.aim.y, m: Math.max(0.3, I.aim.m) } : { x: f.aimLast.x, y: f.aimLast.y, m: 0.65 };
     if (!G.throwBomb(f, a)) { if (f.bombs <= 0) U.showToast('Plus de bombes', '#ffb0b0'); }
   }
 
   // ---------- pointeurs en jeu ----------
   // Relâche toujours les joysticks : un doigt qui quitte l'écran, un appel, un changement d'application ou une pause ne doivent jamais laisser un stick coincé.
-  U.resetSticks = function () { sticks.move = null; sticks.aim = null; I.stickMove = false; I.move.x = I.move.y = 0; I.aim.active = false; I.aim.m = 0; };
+  U.resetSticks = function () { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; I.aim.active = false; I.aim.m = 0; };
   U.releasePointer = function (id) {
     if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
-    if (sticks.aim && sticks.aim.id === id) { sticks.aim = null; I.aim.active = false; I.aim.m = 0; }
   };
   U.gamePointer = function (kind, e, px, py, x, y) {
     const G = WB.G; if (!G) return;
@@ -109,19 +109,13 @@
       const b = U.findBtn(x, y);
       if (b) { U.setPressed(b); if (b.instant && b.fn) { b.fn(); U.setPressed(null); } return; }
       if (e.pointerType === 'mouse') { if (e.button === 0) { const a = mouseAim(); if (a) throwBomb(a); } else if (e.button === 2) { /* clic droit : première case */ castSlot(0); } return; }
-      if (x < U.VW * 0.5) { if (!sticks.move) { sticks.move = { id: id, ox: x, oy: y, x: x, y: y }; I.stickMove = true; } }
-      else if (!sticks.aim) { sticks.aim = { id: id, ox: x, oy: y, x: x, y: y, cast: false }; }
+      if (!sticks.move) { sticks.move = { id: id, ox: x, oy: y, x: x, y: y }; I.stickMove = true; }
     } else if (kind === 'move') {
-      const s = sticks.move && sticks.move.id === id ? sticks.move : sticks.aim && sticks.aim.id === id ? sticks.aim : null;
+      const s = sticks.move && sticks.move.id === id ? sticks.move : null;
       if (s) { s.x = x; s.y = y; }
     } else if (kind === 'up') {
       const b = U.pressedBtn(); if (b && !b.instant) { U.setPressed(null); const cur = U.findBtn(x, y); if (cur && U.sameBtn(b, cur) && cur.fn) { WB.snd.play('click'); cur.fn(); } }
       if (sticks.move && sticks.move.id === id) { sticks.move = null; I.stickMove = false; I.move.x = I.move.y = 0; }
-      if (sticks.aim && sticks.aim.id === id) {
-        const s = sticks.aim, dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), m = clamp(d / 70, 0, 1);
-        if (!s.cast && m > 0.4 && G.started && !G.swap) throwBomb({ x: dx / d, y: dy / d, m: m });
-        sticks.aim = null; I.aim.active = false; I.aim.m = 0;
-      }
     }
   };
   function mouseAim() {
@@ -132,8 +126,8 @@
   }
   function updateSticks() {
     if (sticks.move) { const s = sticks.move, dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), R = 60; if (d > R) { s.ox += dx / d * (d - R); s.oy += dy / d * (d - R); } const m = clamp(d / R, 0, 1); I.move.x = d > 6 ? dx / d * m : 0; I.move.y = d > 6 ? dy / d * m : 0; I.stickMove = true; }
-    if (sticks.aim) { const s = sticks.aim, dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), R = 70; if (d > R) { s.ox += dx / d * (d - R); s.oy += dy / d * (d - R); } if (d > 10) { I.aim.active = true; I.aim.x = dx / d; I.aim.y = dy / d; I.aim.m = clamp(d / R, 0, 1); } else { I.aim.active = false; I.aim.m = 0; } }
-    else if (lastType === 'mouse') { const a = mouseAim(); if (a) { I.aim.active = true; I.aim.x = a.x; I.aim.y = a.y; I.aim.m = a.m; } }
+
+    if (lastType === 'mouse') { const a = mouseAim(); if (a) { I.aim.active = true; I.aim.x = a.x; I.aim.y = a.y; I.aim.m = a.m; } }
   }
 
   // ---------- surcouche dans le monde ----------
@@ -163,9 +157,11 @@
     const G = WB.G, R = G.results, s = U.save; if (U.rewardDone) return; U.rewardDone = true;
     const coins = R.coins + (R.win ? 20 : 5), tro = G.cfg.ranked ? (R.win ? 3 : 0) + (R.rank <= 3 ? 1 : 0) + Math.floor(R.coins / 6) : 0;
     s.coins += coins; s.trophies += tro; s.stats.matches++; s.stats.kills += R.kills; if (R.win) s.stats.wins++;
-    // le niveau du profil monte tout seul avec les trophées gagnés en World Game
-    let up = 0; while (s.level < WB.MAXLV && s.trophies >= WB.trophyCost(s.level)) { s.trophies -= WB.trophyCost(s.level); s.level++; up++; }
-    U.rew = { coins: coins, tro: tro, up: up }; if (up) { WB.snd.play('levelup'); U.showToast('Niveau ' + s.level + ' atteint !', '#ffe27a'); } U.commit();
+    // le niveau du profil monte avec les éliminations faites dans l'intervalle du niveau en cours (les kills des niveaux précédents ne comptent plus)
+    s.lvKills = (s.lvKills || 0) + R.kills; let up = 0, unlock = [];
+    while (s.level < WB.MAXLV && s.lvKills >= WB.xpNeed(s.level)) { s.lvKills -= WB.xpNeed(s.level); s.level++; up++; if (WB.slotCount(s.level) > WB.slotCount(s.level - 1)) unlock.push('case de capacité ' + WB.slotCount(s.level)); if (WB.chainMax(s.level) > WB.chainMax(s.level - 1)) unlock.push('enchaînement de ' + WB.chainMax(s.level)); if (WB.startLv({ kind: 'player', level: s.level }) > WB.startLv({ kind: 'player', level: s.level - 1 })) unlock.push('capacités ramassées niveau ' + WB.startLv({ kind: 'player', level: s.level })); }
+    if (s.level >= WB.MAXLV) s.lvKills = 0;
+    U.rew = { coins: coins, tro: tro, up: up, unlock: unlock }; if (up) { WB.snd.play('levelup'); U.showToast('Niveau ' + s.level + ' atteint !' + (unlock.length ? ' Débloqué : ' + unlock.join(', ') : ''), '#ffe27a'); } U.commit();
   }
   function leaveTo(next) {
     if (U.adWait) return; U.adWait = true;
@@ -241,17 +237,21 @@
     }
     if (f.swallowed) { panel(W / 2 - 130, H * 0.1, 260, 36, { r: 14, stroke: '#ff8ad0' }); text("Tu es avalé", W / 2, H * 0.1 + 19, 16, '#ffd0e4', 'center', 3); }
     // case de capacités
-    const n = f.slots.length, sw = n > 7 ? 48 : 60, gap = n > 7 ? 6 : 10, tot = n * sw + (n - 1) * gap, sx0 = W / 2 - tot / 2, sy = H - 28 - sw;
+    // toutes les touches d'action sont regroupées dans le coin inférieur droit : la bombe en bas à droite, les capacités autour
+    const n = f.slots.length, sw = n > 8 ? 50 : 56, gap = 8, rowH = sw + 17, M = 14, COLS = 4, bs = 74;
+    const cell = function (r, c) { return { x: W - M - sw - c * (sw + gap) - (r === 0 ? 0 : 0), y: H - M - sw - 12 - r * rowH }; };
+    const pos = []; { let r = 0, c = 1; for (let i = 0; i < n; i++) { if (r === 0 && c === 1) c = 1; const q = cell(r, c); if (r === 0) q.x -= (bs - sw); pos.push(q); c++; if (c >= COLS) { r++; c = 0; } } }
+    const rows = Math.max(1, Math.ceil((n + 1) / COLS)), sy = H - M - 12 - sw - (rows - 1) * rowH, sx0 = W - M - COLS * (sw + gap) - bs + sw;
     if (G.swap) {
-      const pk = G.swap.pk; panel(W / 2 - 190, sy - 78, 380, 66, { r: 14, stroke: A[pk.id].col });
-      WB.drawIcon(ctx, pk.id, W / 2 - 160, sy - 45, 38); text('N' + pk.lvl, W / 2 - 140, sy - 25, 12, '#ffd24a', 'left', 3);
-      text('Touche la case à remplacer', W / 2 - 20, sy - 56, 14, '#fff', 'center', 3);
-      ctx.strokeStyle = A[pk.id].col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W / 2 - 160, sy - 45, 24, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(G.swap.t / 7, 0, 1)); ctx.stroke();
-      btn(W / 2 + 70, sy - 66, 104, 42, { label: 'Garder', size: 15, style: 'gray', fn: function () { G.declineSwap(); } });
+      const pk = G.swap.pk; panel(W - M - 396, sy - 78, 380, 66, { r: 14, stroke: A[pk.id].col });
+      WB.drawIcon(ctx, pk.id, W - M - 366, sy - 45, 38); text('N' + pk.lvl, W - M - 346, sy - 25, 12, '#ffd24a', 'left', 3);
+      text('Touche la case à remplacer', W - M - 226, sy - 56, 14, '#fff', 'center', 3);
+      ctx.strokeStyle = A[pk.id].col; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W - M - 366, sy - 45, 24, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(G.swap.t / 7, 0, 1)); ctx.stroke();
+      btn(W - M - 120, sy - 66, 104, 42, { label: 'Garder', size: 15, style: 'gray', fn: function () { G.declineSwap(); } });
     }
     for (let i = 0; i < n; i++) {
-      const x = sx0 + i * (sw + gap), cx = x + sw / 2, cy = sy + sw / 2, ab = f.slots[i];
-      btn(x, sy, sw, sw, { hidden: true, instant: true, fn: (function (k) { return function () { castSlot(k); }; })(i) });
+      const x = pos[i].x, ys = pos[i].y, cx = x + sw / 2, cy = ys + sw / 2, ab = f.slots[i];
+      btn(x, ys, sw, sw, { hidden: true, instant: true, fn: (function (k) { return function () { castSlot(k); }; })(i) });
       ctx.save();
       const swap = !!G.swap;
       if (!ab) {
@@ -269,9 +269,9 @@
         ctx.lineWidth = near ? 5 : 3.5; ctx.strokeStyle = ab.stolen ? '#ff8ad0' : (ready ? def.col : '#5a6490'); ctx.stroke();
         ctx.globalAlpha = ready ? 1 : 0.55; WB.drawIcon(ctx, (ab.id === 'summon' && ab.form) ? ab.form : ab.id, cx, cy - 2, sw * 0.62); ctx.globalAlpha = 1;
         if (!ready) { ctx.fillStyle = 'rgba(5,8,24,.65)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, sw / 2 - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(ab.cd / mx, 0, 1)); ctx.closePath(); ctx.fill(); text(ab.cd >= 10 ? String(Math.ceil(ab.cd)) : ab.cd.toFixed(1), cx, cy, 16, '#fff', 'center', 4); }
-        for (let k = 0; k < 5; k++) { ctx.fillStyle = k < ab.lvl ? '#ffd24a' : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(cx - 16 + k * 8, cy + sw / 2 + 7, 2.7, 0, PI2); ctx.fill(); }
+        for (let k = 0; k < 5; k++) { ctx.fillStyle = k < ab.lvl ? '#ffd24a' : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(cx - 16 + k * 8, cy + sw / 2 + 8, 2.7, 0, PI2); ctx.fill(); }
         if (blocked) { ctx.fillStyle = 'rgba(10,10,30,.45)'; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 2, 0, PI2); ctx.fill(); WB.drawIcon(ctx, 'lock', cx + 16, cy + 16, 16); }
-        const ci = U.chainSel.indexOf(i); if (ci >= 0) { ctx.fillStyle = '#ff8aff'; ctx.beginPath(); ctx.arc(x + sw - 6, y0(sy) + 6, 11, 0, PI2); ctx.fill(); text(String(ci + 1), x + sw - 6, y0(sy) + 7, 13, '#fff', 'center'); }
+        const ci = U.chainSel.indexOf(i); if (ci >= 0) { ctx.fillStyle = '#ff8aff'; ctx.beginPath(); ctx.arc(x + sw - 6, ys + 6, 11, 0, PI2); ctx.fill(); text(String(ci + 1), x + sw - 6, ys + 7, 13, '#fff', 'center'); }
         if (swap) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.4 + 0.5 * pulse) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 + 4, 0, PI2); ctx.stroke(); }
       }
       ctx.restore();
@@ -279,19 +279,18 @@
     function y0(v) { return v; }
     // enchaînement (niveaux 7 et plus)
     if (WB.chainMax(f.level) > 1) {
-      const cx = sx0 - 70;
-      btn(cx, sy + 2, 56, 56, { icon: 'chain', style: U.chainMode ? 'gold' : 'dark', instant: true, sel: U.chainMode, fn: function () { if (U.chainMode && U.chainSel.length) fireChain(); else { U.chainMode = !U.chainMode; U.chainSel = []; } } });
+      const cx = sx0 - 12;
+      btn(cx, H - M - 12 - 56, 56, 56, { icon: 'chain', style: U.chainMode ? 'gold' : 'dark', instant: true, sel: U.chainMode, fn: function () { if (U.chainMode && U.chainSel.length) fireChain(); else { U.chainMode = !U.chainMode; U.chainSel = []; } } });
     }
     // bombe
-    const bx = W - 92, by = H - 150;
-    btn(bx, by, 72, 72, { style: f.bombs > 0 ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 40); text('x' + f.bombs, cx + 20, cy + 22, 16, '#fff', 'center', 4); } });
+    const bx = W - M - bs, by = H - M - bs;
+    btn(bx, by, bs, bs, { style: f.bombs > 0 ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 40); text('x' + f.bombs, cx + 20, cy + 22, 16, '#fff', 'center', 4); } });
     // joysticks
     if (WB.input.touch || lastType === 'touch') {
-      const hint = !sticks.move && !sticks.aim && G.t < 14 ? 0.5 : 0;
+      const hint = !sticks.move && G.t < 14 ? 0.5 : 0;
       if (!sticks.move && hint) { ctx.globalAlpha = hint; ctx.strokeStyle = '#9ad8ff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(120, H - 100, 52, 0, PI2); ctx.stroke(); ctx.globalAlpha = 1; }
-      if (!sticks.aim && hint) { ctx.globalAlpha = hint; ctx.strokeStyle = '#ffb84a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(W - 150, H - 70, 52, 0, PI2); ctx.stroke(); ctx.globalAlpha = 1; }
-      for (const k of ['move', 'aim']) {
-        const s = sticks[k]; if (!s) continue; const c = k === 'move' ? '154,216,255' : '255,184,74', R = k === 'move' ? 60 : 70;
+      for (const k of ['move']) {
+        const s = sticks[k]; if (!s) continue; const c = '154,216,255', R = 60;
         ctx.fillStyle = 'rgba(' + c + ',.14)'; ctx.strokeStyle = 'rgba(' + c + ',.7)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(s.ox, s.oy, R, 0, PI2); ctx.fill(); ctx.stroke();
         const dx = s.x - s.ox, dy = s.y - s.oy, d = Math.hypot(dx, dy), q = d > R ? R / d : 1; ctx.fillStyle = 'rgba(' + c + ',.85)'; ctx.beginPath(); ctx.arc(s.ox + dx * q, s.oy + dy * q, 24, 0, PI2); ctx.fill();
       }
