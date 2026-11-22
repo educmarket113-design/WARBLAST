@@ -81,7 +81,7 @@
   function defaults() {
     const chars = {};
     for (let i = 0; i < WB.CHARS.length; i++) chars[i] = { lvl: 1, xp: 0 };
-    return { v: 1, coins: 0, trophies: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
+    return { v: 2, level: 1, coins: 0, trophies: 0, spec: WB.defaultSpec(), chars: chars, owned: {}, sound: true, stats: { matches: 0, kills: 0, wins: 0 }, name: 'Joueur' };
   }
   WB.defaultSave = defaults;
 
@@ -91,6 +91,10 @@
     const r = Object.assign(base, d);
     r.spec = Object.assign(WB.defaultSpec(), d.spec || {});
     r.chars = Object.assign(base.chars, d.chars || {});
+    // le niveau appartient au profil : on reprend le meilleur niveau déjà obtenu avec n'importe quel personnage
+    let best = Math.max(1, +d.level || 1); for (const k in r.chars) best = Math.max(best, (r.chars[k] && r.chars[k].lvl) || 1);
+    r.level = Math.min(WB.MAXLV, best);
+    r.name = (typeof d.name === 'string' && d.name.trim()) ? d.name : base.name;
     r.stats = Object.assign({ matches: 0, kills: 0, wins: 0 }, d.stats || {});
     r.owned = d.owned || {};
     return r;

@@ -22,13 +22,16 @@
     const R = 22 * s, t = o.t || 0, mv = o.moving ? 1 : 0, ph = o.walk || 0;
     const bob = mv ? -Math.abs(Math.sin(ph)) * 3.2 * s : -Math.sin(t * 2.4) * 1.1 * s;
     const fx = o.fx || 0, fy = o.fy || 0;
+    const back = fy < -0.35 || !!o.back, jmp = o.jump || 0, cst = o.cast || 0; // vu de dos quand il regarde vers le haut de l'écran
     const feat = WB.CHARS[spec.char].feat;
     const cape = WB.equip('cape', spec.cape), armor = WB.equip('armor', spec.armor), hat = WB.equip('hat', spec.hat),
       scarf = WB.equip('scarf', spec.scarf), shoes = WB.equip('shoes', spec.shoes);
     c.save(); c.translate(x, y);
     if (o.alpha != null) c.globalAlpha = o.alpha;
     ell(c, 0, R * 0.92, R * 0.95, R * 0.34, 'rgba(0,0,0,.28)');
-    c.translate(0, bob);
+    c.translate(0, bob - jmp * 6 * s);
+    if (mv) c.rotate(Math.sin(ph) * 0.07); // le corps accompagne la foulée
+    if (jmp) c.scale(1 - 0.05 * jmp, 1 + 0.08 * jmp);
     const sw = Math.sin(t * 3 + ph * 0.5) * 3 * s;
     // cape
     if (cape) {
@@ -52,9 +55,10 @@
       for (const d of [-1, 1]) { c.beginPath(); c.moveTo(d * R * 0.9, -R * 0.1); c.quadraticCurveTo(d * R * 1.6, -R * 0.4, d * R * 1.35, R * 0.35); c.quadraticCurveTo(d * R * 1.1, R * 0.2, d * R * 0.9, R * 0.3); c.closePath(); c.fillStyle = lt; c.fill(); c.lineWidth = 2 * s; c.strokeStyle = dk; c.stroke(); }
     }
     // pieds
-    const fs = mv ? Math.sin(ph) * 4 * s : 0;
     for (const d of [-1, 1]) {
-      const fxp = d * R * 0.5, fyp = R * 0.86 + (d < 0 ? fs : -fs) * 0.5;
+      // vraie foulée : les pieds s'alternent d'avant en arrière et se lèvent à chaque pas ; en saut ils se replient
+      const pp = ph + (d < 0 ? 0 : Math.PI), st = mv ? Math.sin(pp) : 0, lift = mv ? Math.max(0, Math.cos(pp)) : 0;
+      const fxp = d * R * (0.5 + (mv ? 0.05 * Math.cos(pp) : 0)), fyp = R * 0.86 + st * R * 0.3 - lift * R * 0.2 - jmp * R * 0.3;
       if (shoes && shoes.style === 'tall') { ell(c, fxp, fyp - R * 0.1, R * 0.34, R * 0.38, shoes.c, shade(shoes.c, -60), 2 * s); ell(c, fxp, fyp - R * 0.34, R * 0.3, R * 0.1, shade(shoes.c, 40)); }
       else if (shoes) { ell(c, fxp, fyp, R * 0.42, R * 0.26, shoes.c, shade(shoes.c, -60), 2 * s); if (shoes.style === 'sneaker') { ell(c, fxp, fyp + R * 0.12, R * 0.4, R * 0.1, '#d0d6e6'); } }
       else ell(c, fxp, fyp, R * 0.4, R * 0.26, shade(base, -22), dk, 2 * s);
@@ -84,6 +88,8 @@
       if (scarf.style === 'stripe') { c.fillStyle = scarf.c2; c.fillRect(-R * 0.12, R * 0.12, R * 0.26, R * 0.1); c.fillRect(-R * 0.12, R * 0.32, R * 0.26, R * 0.1); }
       c.restore(); c.lineCap = 'butt';
     }
+    if (back) { c.strokeStyle = 'rgba(0,0,0,.18)'; c.lineWidth = 2 * s; c.beginPath(); c.arc(0, -R * 0.05, R * 0.55, Math.PI * 0.15, Math.PI * 0.85); c.stroke(); ell(c, -R * 0.25, -R * 0.45, R * 0.28, R * 0.14, 'rgba(255,255,255,.22)'); }
+    else {
     // visage
     for (const d of [-1, 1]) ell(c, d * R * 0.6, R * 0.22, R * 0.17, R * 0.1, 'rgba(255,90,130,.45)');
     const ex = fx * R * 0.1, ey = fy * R * 0.06;
@@ -101,11 +107,16 @@
     c.strokeStyle = '#7a2a3a'; c.lineWidth = 1.8 * s; c.beginPath();
     if (o.hurt) { c.arc(ex * 0.5, R * 0.3, R * 0.07, 0, PI2); } else { c.arc(ex * 0.5, R * 0.2, R * 0.12, 0.15 * Math.PI, 0.85 * Math.PI); }
     c.stroke();
-    // mains
-    const hw = mv ? Math.sin(ph) * 3 * s : Math.sin(t * 2.4) * 1.2 * s;
+    }
+    // bras : balancier opposé aux jambes, levés pendant un saut ou l'usage d'une capacité, tendus pour lancer
     for (const d of [-1, 1]) {
-      let hx = d * R * 1.02, hy = R * 0.25 + (d < 0 ? hw : -hw);
-      if (o.arm && d > 0) { hx = (o.fx || 1) * R * 1.1 * 1; hy = (o.fy || 0) * R * 1.0 + R * 0.1; }
+      const pp = ph + (d < 0 ? Math.PI : 0), sw2 = mv ? Math.sin(pp) : Math.sin(t * 2.4 + d) * 0.25;
+      let hx = d * R * (1.04 + (mv ? 0.06 * Math.abs(Math.cos(pp)) : 0)), hy = R * 0.22 + sw2 * R * 0.36;
+      if (jmp || cst) { const up = Math.max(jmp, cst); hx = d * R * (1.0 + 0.25 * up); hy = R * 0.22 - up * R * 0.95 + Math.sin(t * 14 + d) * R * 0.05 * cst; }
+      if (o.arm && d > 0) { hx = (o.fx || 1) * R * 1.25; hy = (o.fy || 0) * R * 1.15 + R * 0.1; }
+      const sx = d * R * 0.8, sy = R * 0.12;
+      c.lineCap = 'round'; c.strokeStyle = dk; c.lineWidth = R * 0.36 + 2 * s; c.beginPath(); c.moveTo(sx, sy); c.lineTo(hx, hy); c.stroke();
+      c.strokeStyle = base; c.lineWidth = R * 0.36 - 1 * s; c.beginPath(); c.moveTo(sx, sy); c.lineTo(hx, hy); c.stroke(); c.lineCap = 'butt';
       ell(c, hx, hy, R * 0.25, R * 0.24, base, dk, 2 * s);
     }
     // éléments devant

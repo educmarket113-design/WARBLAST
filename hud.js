@@ -156,7 +156,9 @@
     const G = WB.G, R = G.results, s = U.save; if (U.rewardDone) return; U.rewardDone = true;
     const coins = R.coins + (R.win ? 20 : 5), tro = G.cfg.ranked ? (R.win ? 3 : 0) + (R.rank <= 3 ? 1 : 0) + Math.floor(R.coins / 6) : 0;
     s.coins += coins; s.trophies += tro; s.stats.matches++; s.stats.kills += R.kills; if (R.win) s.stats.wins++;
-    U.rew = { coins: coins, tro: tro }; U.commit();
+    // le niveau du profil monte tout seul avec les trophées gagnés en World Game
+    let up = 0; while (s.level < WB.MAXLV && s.trophies >= WB.trophyCost(s.level)) { s.trophies -= WB.trophyCost(s.level); s.level++; up++; }
+    U.rew = { coins: coins, tro: tro, up: up }; if (up) { WB.snd.play('levelup'); U.showToast('Niveau ' + s.level + ' atteint !', '#ffe27a'); } U.commit();
   }
   function leaveTo(next) {
     if (U.adWait) return; U.adWait = true;
@@ -232,7 +234,7 @@
     }
     if (f.swallowed) { panel(W / 2 - 130, H * 0.1, 260, 36, { r: 14, stroke: '#ff8ad0' }); text("Tu es avalé", W / 2, H * 0.1 + 19, 16, '#ffd0e4', 'center', 3); }
     // case de capacités
-    const n = f.slots.length, sw = n > 7 ? 48 : 60, gap = n > 7 ? 6 : 10, tot = n * sw + (n - 1) * gap, sx0 = W / 2 - tot / 2, sy = H - 14 - sw;
+    const n = f.slots.length, sw = n > 7 ? 48 : 60, gap = n > 7 ? 6 : 10, tot = n * sw + (n - 1) * gap, sx0 = W / 2 - tot / 2, sy = H - 28 - sw;
     if (G.swap) {
       const pk = G.swap.pk; panel(W / 2 - 190, sy - 78, 380, 66, { r: 14, stroke: A[pk.id].col });
       WB.drawIcon(ctx, pk.id, W / 2 - 160, sy - 45, 38); text('N' + pk.lvl, W / 2 - 140, sy - 25, 12, '#ffd24a', 'left', 3);
@@ -253,8 +255,10 @@
         let near = false; if (ready && def.type === 'zone') near = G.enemiesIn(f, f.x, f.y, def.range(ab.lvl)).length > 0;
         const pulse = 0.5 + 0.5 * Math.sin(time * 9);
         if (near) { ctx.shadowColor = def.col; ctx.shadowBlur = 18 + 10 * pulse; }
-        const g = ctx.createRadialGradient(cx, cy - 8, 4, cx, cy, sw / 2); g.addColorStop(0, near ? def.col : '#2a3560'); g.addColorStop(1, near ? '#10183a' : '#141a38');
+        const g = ctx.createRadialGradient(cx, cy - 8, 4, cx, cy, sw / 2); g.addColorStop(0, near ? def.col : '#1c2447'); g.addColorStop(1, near ? '#10183a' : '#0c1230');
         ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, sw / 2 - 1, 0, PI2); ctx.fill(); ctx.shadowBlur = 0;
+        // remplissage = vraie progression de la capacité (niveau et éliminations), du bas vers le haut
+        { const fr = WB.abilProgress(ab), R = sw / 2 - 3; if (fr > 0) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, PI2); ctx.clip(); const top = cy + R - 2 * R * fr; ctx.fillStyle = def.col; ctx.globalAlpha = 0.85; ctx.fillRect(cx - R, top, 2 * R, cy + R - top + 1); ctx.globalAlpha = 1; ctx.fillStyle = '#fff'; ctx.fillRect(cx - R, top, 2 * R, 2.5); ctx.restore(); } }
         ctx.lineWidth = near ? 5 : 3.5; ctx.strokeStyle = ab.stolen ? '#ff8ad0' : (ready ? def.col : '#5a6490'); ctx.stroke();
         ctx.globalAlpha = ready ? 1 : 0.55; WB.drawIcon(ctx, (ab.id === 'summon' && ab.form) ? ab.form : ab.id, cx, cy - 2, sw * 0.62); ctx.globalAlpha = 1;
         if (!ready) { ctx.fillStyle = 'rgba(5,8,24,.65)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, sw / 2 - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(ab.cd / mx, 0, 1)); ctx.closePath(); ctx.fill(); text(ab.cd >= 10 ? String(Math.ceil(ab.cd)) : ab.cd.toFixed(1), cx, cy, 16, '#fff', 'center', 4); }

@@ -37,6 +37,30 @@
     U.W = w; U.H = h; cv.width = Math.round(w * U.dpr); cv.height = Math.round(h * U.dpr);
     U.S = Math.min(h / 540, w / 860); U.VW = w / U.S; U.VH = h / U.S;
   };
+  // ----- saisie du pseudo : vrai champ texte (clavier du téléphone, lettres, chiffres, emojis) -----
+  U.editName = function () {
+    if (document.getElementById('namebox')) return;
+    const ov = document.createElement('div'); ov.id = 'namebox';
+    ov.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:50;background:rgba(5,8,22,.88);display:flex;align-items:center;justify-content:center;padding:12px;box-sizing:border-box;font-family:system-ui,sans-serif';
+    ov.innerHTML = '<div style="background:#18204a;border:3px solid #6f8cff;border-radius:18px;padding:18px;width:min(92vw,420px);box-sizing:border-box;color:#fff;text-align:center">' +
+      '<div style="font-size:20px;font-weight:700;margin-bottom:10px">Ton pseudo</div>' +
+      '<input id="nameinput" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" enterkeyhint="done" placeholder="Écris ton nom" style="width:100%;box-sizing:border-box;font-size:22px;padding:12px;border-radius:12px;border:2px solid #9db4ff;background:#0d1330;color:#fff;text-align:center;outline:none">' +
+      '<div id="namemsg" style="min-height:20px;font-size:14px;color:#ffb0b0;margin:6px 0">16 caractères au maximum. Lettres, chiffres et emojis acceptés.</div>' +
+      '<div style="display:flex;gap:10px;justify-content:center"><button id="namecancel" style="flex:1;font-size:18px;padding:12px;border-radius:12px;border:0;background:#4a5378;color:#fff">Annuler</button>' +
+      '<button id="namesave" style="flex:1;font-size:18px;font-weight:700;padding:12px;border-radius:12px;border:0;background:#3bbf5a;color:#fff">Enregistrer</button></div></div>';
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('#nameinput'), msg = ov.querySelector('#namemsg'); inp.value = U.save.name || '';
+    function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    function save() {
+      const chars = Array.from(inp.value.replace(/[\u0000-\u001f\u007f]/g, '').trim());
+      if (!chars.length) { msg.textContent = 'Écris au moins un caractère.'; return; }
+      U.save.name = chars.slice(0, 16).join(''); U.commit(); WB.snd.play('coin'); close(); U.showToast('Nom enregistré : ' + U.save.name, '#9dffb0');
+    }
+    inp.addEventListener('input', function () { const a = Array.from(inp.value); if (a.length > 16) inp.value = a.slice(0, 16).join(''); msg.textContent = ''; });
+    inp.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') save(); else if (e.key === 'Escape') close(); });
+    ov.querySelector('#namesave').addEventListener('click', save); ov.querySelector('#namecancel').addEventListener('click', close);
+    setTimeout(function () { try { inp.focus(); inp.select(); } catch (e) {} }, 60);
+  };
   U.commit = function () { WB.sdk.save(U.save); };
   U.go = function (s) { U.screen = s; U.t = 0; btns = []; pressed = null; };
   U.showToast = function (txt, col) { U.toast = { txt: txt, t: 2.2, col: col || '#fff' }; };
@@ -133,7 +157,7 @@
   };
 
   function specOf() { const s = U.save; return Object.assign({}, s.spec); }
-  function charLv(i) { return U.save.chars[i] ? U.save.chars[i].lvl : 1; }
+  function charLv() { return U.save.level || 1; } // niveau du profil, identique pour tous les personnages
 
   function topBar(title, back) {
     const W = U.VW; panel(0, 0, W, 54, { r: 0, fill: 'rgba(8,12,30,.85)', stroke: 'rgba(120,150,255,.25)' });
@@ -151,7 +175,8 @@
   screens.menu = function (time) {
     const W = U.VW, H = U.VH; bg(time); topBar(null, null);
     const s = U.save, sp = specOf(), lv = charLv(sp.char);
-    text(s.name, 16, 28, 22, '#fff', 'left', 4);
+    text(s.name, 16, 24, 22, '#fff', 'left', 4); text('Modifier mon nom', 16, 43, 11, 'rgba(190,210,255,.75)', 'left', 2);
+    button(8, 4, 230, 48, { hidden: true, fn: function () { U.editName(); } });
     // personnage central
     const cx = W / 2, cy = H * 0.5;
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(cx, cy + 92, 90, 20, 0, 0, PI2); ctx.fill();
@@ -197,7 +222,6 @@
     for (let i = 0; i < 10; i++) {
       const col = i % 5, row = (i / 5) | 0, x = X0 + 10 + col * 80, y = 64 + row * 70;
       const b = button(x, y, 74, 64, { style: 'dark', sel: sp.char === i, fn: function () { s.spec.char = i; U.commit(); WB.snd.play('click'); }, draw: function (cx, cy) { WB.drawBlob(ctx, Object.assign({}, sp, { char: i }), cx, cy + 6, 1.15, { t: time + i, moving: false, fx: 0.4, fy: 0 }); } });
-      const l = charLv(i); text(String(l), x + 62, y + 12, 13, '#ffd24a', 'center', 3);
     }
     // onglets
     const ty = 208; let tx = X0 + 10;
@@ -239,7 +263,7 @@
     if (lv < WB.MAXLV) {
       const can = s.trophies >= cost;
       button(px - 130, py + 218, 260, 50, { label: 'Monter au niveau ' + (lv + 1), sub: cost + ' trophées', style: can ? 'gold' : 'gray', size: 17, off: !can, fn: function () {
-        if (s.trophies >= cost) { s.trophies -= cost; s.chars[sp.char].lvl++; U.commit(); WB.snd.play('levelup'); U.showToast(WB.CHARS[sp.char].name + ' passe niveau ' + (lv + 1), '#ffe27a'); }
+        if (s.trophies >= cost) { s.trophies -= cost; s.level = lv + 1; U.commit(); WB.snd.play('levelup'); U.showToast('Ton niveau passe à ' + (lv + 1), '#ffe27a'); }
       } });
     } else text('Niveau maximum', px, py + 242, 18, '#9dffb0', 'center', 4);
     if (WB.sdk.rewardedSupported()) button(px - 130, py + 276, 260, 44, { label: '+40 pièces', sub: 'vidéo', icon: 'coin', style: 'dark', size: 16, fn: function () { U.rewardCoins(40, 'shop_coins'); } });
@@ -290,7 +314,7 @@
       text('Le jeu en ligne entre amis demande un serveur, absent de cette version. Pour l\'instant la partie se joue contre des bots.', X0 + 40, 436, 13, '#cfe0ff', 'left', 3);
     } else {
       const lv = charLv(U.save.spec.char);
-      panel(X0 + 20, 392, 820, 46, { r: 12 }); text('Ton personnage est niveau ' + lv + '. Tu as ' + WB.slotCount(lv) + ' case' + (lv > 1 ? 's' : '') + ' de capacité. Les trophées servent à monter de niveau.', X0 + 430, 415, 14, '#cfe0ff', 'center', 3);
+      panel(X0 + 20, 392, 820, 46, { r: 12 }); text('Ton niveau est ' + lv + ' (le même pour tous tes personnages). Tu as ' + WB.slotCount(lv) + ' case' + (lv > 1 ? 's' : '') + ' de capacité. Les trophées servent à monter de niveau.', X0 + 430, 415, 14, '#cfe0ff', 'center', 3);
     }
     button(W / 2 - 200, H - 86, 400, 64, { label: 'LANCER LA PARTIE', style: 'red', size: 30, fn: function () { U.startGame(); } });
     drawToast();
@@ -309,7 +333,7 @@
     const W = U.VW; bg(time); topBar('Réglages', 'menu');
     const s = U.save;
     button(W / 2 - 160, 90, 320, 60, { label: s.sound ? 'Son activé' : 'Son coupé', style: s.sound ? 'green' : 'gray', size: 22, fn: function () { s.sound = !s.sound; WB.snd.setEnabled(s.sound); U.commit(); WB.snd.play('click'); } });
-    button(W / 2 - 160, 166, 320, 60, { label: 'Changer de nom', sub: s.name, style: 'blue', size: 20, fn: function () { const i = WB.NAMES.indexOf(s.name); s.name = WB.NAMES[(i + 1) % WB.NAMES.length]; U.commit(); WB.snd.play('click'); } });
+    button(W / 2 - 160, 166, 320, 60, { label: 'Modifier mon nom', sub: s.name, style: 'blue', size: 20, fn: function () { U.editName(); } });
     button(W / 2 - 160, 242, 320, 60, { label: 'Comment jouer', style: 'gray', size: 22, fn: function () { U.go('help'); } });
     text('Warblast 1.0', W / 2, 340, 16, 'rgba(210,225,255,.6)', 'center', 3);
   };
@@ -319,7 +343,7 @@
     ['spark', 'Ramasse les blocs au sol pour remplir tes cases vides, en bas de l\'écran. Touche une case pour lancer la capacité.'],
     ['trophy', 'Chaque élimination fait monter le niveau de la capacité utilisée, jusqu\'au niveau 5.'],
     ['heart', 'Évite l\'eau, les flammes et les araignées. Les sbires noirs et les boss rouges attaquent tout le monde.'],
-    ['coin', 'Les pièces achètent des tenues. Les trophées de fin de partie font monter ton personnage jusqu\'au niveau 10.']
+    ['coin', 'Les pièces achètent des tenues. Les trophées de fin de partie font monter ton niveau jusqu\'à 10, quel que soit le personnage que tu joues.']
   ];
   screens.help = function (time) {
     const W = U.VW; bg(time); topBar('Comment jouer', U.screen === 'help' && U.prev === 'game' ? 'game' : 'menu');

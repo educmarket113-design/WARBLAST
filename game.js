@@ -39,7 +39,7 @@
     function hpFor(lv) { return 100 + 12 * (lv - 1); }
 
     // ---- création des combattants ----
-    const mode = G.mode, names = shuffle(WB.NAMES.slice()), total = mode.total, plv = cfg.playerLevel || 1;
+    const mode = G.mode, names = shuffle(WB.NAMES.filter(n => n !== cfg.name)), total = mode.total, plv = cfg.playerLevel || 1;
     const teamOf = i => mode.teams ? Math.floor(i / mode.size) : i;
     for (let i = 0; i < total; i++) {
       const isP = i === 0, lv = isP ? plv : clamp(plv + Math.floor(rnd(-1, 2.01)), 1, WB.MAXLV);
@@ -66,7 +66,7 @@
     for (const f of G.F) if (f.team !== 'S' && G.score[f.team] == null) G.score[f.team] = 0;
 
     // ---- utilitaires ----
-    G.sfx = n => WB.snd.play(n);
+    G.sfx = (n, v) => { if (!G.muteSfx) WB.snd.play(n, v); };
     G.shake = v => { G.shakeV = Math.max(G.shakeV, v); };
     G.later = (d, fn) => G.timers.push({ t: d, fn: fn });
     G.fx = function (type, x, y, o) {
@@ -115,6 +115,7 @@
       if (s && s !== t) t.lastHit = { by: s, ab: ab, t: G.t };
       if (!opt.dot && amt >= 3) G.text(t.x, t.y - t.r * t.scale, Math.round(amt), t === G.player ? '#ff5a5a' : '#fff', amt >= 30 ? 20 : 15);
       if (t === G.player && !opt.dot) G.shake(Math.min(7, amt / 5));
+      if (!opt.dot && amt >= 3) { const pl = G.player; if (t === pl) G.sfx('impact'); else if (s === pl) G.sfx('impact', 0.6); }
       if (t.hp <= 0) G.kill(t, s, ab);
     };
     G.heal = function (f, amt) { f.hp = Math.min(f.maxhp, f.hp + amt); G.text(f.x, f.y - 26, '+' + Math.round(amt), '#5aff8a', 15); G.fx('burst', f.x, f.y, { col: '#7dff9a', n: 8, life: 0.5 }); };
@@ -189,10 +190,10 @@
       if (t.thrall) { const th = t.thrall; if (th.owner && th.owner.alive && th.phase === 1) { th.phase = 2; th.t = 45; t.hp = Math.round(t.maxhp * 0.6); t.st = { invuln: 1 }; t.dots = []; G.fx('ring', t.x, t.y, { r: 70, col: '#8affc8', life: 0.7, w: 7 }); G.fx('burst', t.x, t.y, { col: '#8affc8', n: 16, life: 0.7 }); G.text(t.x, t.y - 50, 'Renaît esclave', '#8affc8', 16); G.sfx('spear'); return; } G.release(t); }
       if (!killer && t.lastHit && G.t - t.lastHit.t < 8) { killer = t.lastHit.by; ab = ab || t.lastHit.ab; }
       const slots = t.slots.slice(), necro = t.necro;
+      { const pl = G.player; if (pl) { if (killer === pl && t !== pl) G.sfx('kill'); else if (t === pl) G.sfx('ko'); else if (Math.hypot(pl.x - t.x, pl.y - t.y) < 500) G.sfx('ko', 0.5); } }
       t.alive = false; t.hp = 0; t.st = {}; t.dots = []; t.dash = null; t.deaths++; t.vx = t.vy = t.kx = t.ky = 0;
       G.fx('burst', t.x, t.y, { col: '#fff', n: 14, life: 0.6 }); G.fx('ring', t.x, t.y, { r: 50, col: '#fff', life: 0.4, w: 4 });
       if (t.kind === 'thrall' || t.kind === 'golem') { G.fx('burst', t.x, t.y, { col: '#aaa', n: 14, life: 0.6 }); const i = G.F.indexOf(t); if (i >= 0) G.F.splice(i, 1); if (t.owner) t.owner.thralls = t.owner.thralls.filter(x => x !== t); return; }
-      G.sfx(t === G.player ? 'die' : 'hit');
       if (t.kind === 'player' || t.kind === 'bot') {
         for (const th of t.thralls.slice()) { if (th.kind === 'golem') { th.hp = 0; G.kill(th, null, null); } else G.release(th); } t.thralls = [];
       }
@@ -249,7 +250,7 @@
       for (let i = 1; i <= n; i++) { const x = f.x + Math.cos(a) * d * i / n, y = f.y + Math.sin(a) * d * i / n; if (W.solidAt(x, y)) { tx = lx; ty = ly; break; } lx = x; ly = y; }
       const dd = Math.max(30, Math.hypot(tx - f.x, ty - f.y));
       G.proj({ kind: 'bomb', x: f.x, y: f.y, tx: tx, ty: ty, u: 0, T: Math.max(0.28, dd / 420), owner: f, ab: 'bomb' });
-      G.sfx('throw'); f.aimLast = { x: aim.x, y: aim.y }; return true;
+      G.sfx('throw'); f.armT = 0.3; f.aimLast = { x: aim.x, y: aim.y }; return true;
     };
     G.splash = function (f, x, y, r, dmg, ab, o) {
       o = o || {}; const hit = [];
@@ -299,7 +300,8 @@
     G.useSlot = function (f, i, aim) {
       const ab = f.slots[i]; if (!ab || !G.canCast(f) || ab.cd > 0) return false;
       const def = A[ab.id]; if (def.type === 'aim' && aim.m == null) aim.m = 0.7;
-      const r = def.cast(f, ab, aim); if (r === false) return false;
+      G.muteSfx = true; let r; try { r = def.cast(f, ab, aim); } finally { G.muteSfx = false; } if (r === false) return false;
+      f.castT = 0.4; { const pl = G.player, dd = pl ? Math.hypot(pl.x - f.x, pl.y - f.y) : 0, vv = f === pl ? 1 : Math.max(0, 1 - dd / 700) * 0.8; if (vv > 0.05) WB.snd.play('ab_' + ab.id, vv); }
       ab.cd = (typeof r === 'number' ? r : def.cd(ab.lvl)) * WB.cdMul(ab.id) * (f.kind === 'boss' ? 1.7 : f.kind === 'minion' ? 1.4 : 1); f.aimLast = { x: aim.x, y: aim.y }; return true;
     };
     G.chain = function (f, list, aim) {
@@ -316,7 +318,7 @@
     };
     G.swapSlot = function (i) {
       const sw = G.swap, f = G.player; if (!sw || !f.alive) return;
-      const old = f.slots[i]; f.slots[i] = WB.newAbility(sw.pk.id, sw.pk.lvl);
+      const old = f.slots[i]; f.slots[i] = WB.newAbility(sw.pk.id, Math.max(sw.pk.lvl, WB.startLv(f)));
       const idx = G.pickups.indexOf(sw.pk); if (idx >= 0) G.pickups.splice(idx, 1);
       if (old) addPickup({ kind: 'bloc', id: old.id, lvl: old.lvl, x: f.x, y: f.y, noPick: G.t + 1.5, declined: G.t + 1.5 });
       G.eat(f, sw.pk.id); G.swap = null;
@@ -348,11 +350,11 @@
           if (f.kind === 'boss' || f.kind === 'thrall' || f.thrall || f.swallow) continue;
           if (p.mystery) { p.id = WB.randomAbility(); p.lvl = Math.random() < 0.7 ? 1 : (Math.random() < 0.7 ? 2 : 3); p.mystery = false; p.revealed = true; }
           const idx = f.slots.indexOf(null);
-          if (idx >= 0) { f.slots[idx] = WB.newAbility(p.id, p.lvl); G.pickups.splice(i, 1); G.eat(f, p.id); }
+          if (idx >= 0) { f.slots[idx] = WB.newAbility(p.id, Math.max(p.lvl, WB.startLv(f))); G.pickups.splice(i, 1); G.eat(f, p.id); }
           else if (pl) { if (!(p.declined > G.t) && (!G.swap || G.swap.pk !== p)) G.swap = { pk: p, t: 7 }; }
           else if (f.slots.length) {
             let wi = 0; for (let k = 1; k < f.slots.length; k++) if (f.slots[k].lvl < f.slots[wi].lvl) wi = k;
-            if (p.lvl > f.slots[wi].lvl || Math.random() < 0.15) { const old = f.slots[wi]; f.slots[wi] = WB.newAbility(p.id, p.lvl); G.eat(f, p.id); G.pickups.splice(i, 1); addPickup({ kind: 'bloc', id: old.id, lvl: old.lvl, x: f.x, y: f.y, noPick: G.t + 2 }); }
+            if (p.lvl > f.slots[wi].lvl || Math.random() < 0.15) { const old = f.slots[wi]; f.slots[wi] = WB.newAbility(p.id, Math.max(p.lvl, WB.startLv(f))); G.eat(f, p.id); G.pickups.splice(i, 1); addPickup({ kind: 'bloc', id: old.id, lvl: old.lvl, x: f.x, y: f.y, noPick: G.t + 2 }); }
           }
         }
       }
@@ -481,6 +483,7 @@
       const st = f.st;
       for (const k of TIMED) if (st[k] > 0) st[k] = Math.max(0, st[k] - dt);
       if (st.afterRoot && !(st.root > 0)) { st.slowT = st.afterRoot; st.slowMax = st.afterRoot; st.slowAmt = 0.5; st.afterRoot = 0; }
+      f.armT = Math.max(0, (f.armT || 0) - dt); f.castT = Math.max(0, (f.castT || 0) - dt);
       if (f.eat) { f.eat.t += dt; if (f.eat.t >= f.eat.dur) f.eat = null; }
       f.hurtT = Math.max(0, f.hurtT - dt); f.flash = Math.max(0, f.flash - dt); f.bombCd = Math.max(0, f.bombCd - dt); f.t += dt;
       for (const ab of f.slots) if (ab && ab.cd > 0) { ab.cd -= dt; if (ab.cd <= 0) { ab.cd = 0; if (ab.id === 'dash' && ab.charges <= 0) ab.charges = 3; } }
@@ -540,7 +543,7 @@
     // ---- boucle de mise à jour ----
     G.update = function (dt) {
       if (G.over) { for (const e of G.fxs) e.t += dt; return; }
-      if (!G.started) { G.countdown -= dt; if (G.countdown <= 0) { G.started = true; WB.sdk.msg('gameplay_started'); } }
+      if (!G.started) { const c0 = Math.ceil(G.countdown); G.countdown -= dt; if (Math.ceil(G.countdown) < c0 && G.countdown > 0) G.sfx('count'); if (G.countdown <= 0) { G.sfx('go'); G.started = true; WB.sdk.msg('gameplay_started'); } }
       else { G.t += dt; G.timeLeft -= dt; }
       W.time = G.t;
       for (const f of G.F.slice()) updateFighter(f, dt);
@@ -752,7 +755,7 @@
     }
     if (jh > 0) { ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(f.x, f.y + 18, 20 - jh * 0.1, 7, 0, 0, PI2); ctx.fill(); }
     const px = f.x, py = f.y - jh - (f.kind === 'boss' ? 6 : 0);
-    const o = { t: f.t, walk: f.walk, moving: f.moving, fx: f.face.x, fy: f.face.y, alpha: alpha, flash: f.flash > 0, hurt: f.hurtT > 0, arm: false };
+    const o = { t: f.t, walk: f.walk, moving: f.moving, fx: f.face.x, fy: f.face.y, alpha: alpha, flash: f.flash > 0, hurt: f.hurtT > 0, arm: (f.armT || 0) > 0, cast: Math.min(1, (f.castT || 0) / 0.3), jump: f.st.jump ? Math.sin(Math.min(1, f.st.jump.t / (f.st.jump.dur || 1)) * Math.PI) : 0 };
     if (f.kind === 'minion') WB.drawMinion(ctx, px, py, 1, o);
     else if (f.kind === 'boss') WB.drawMinion(ctx, px, py, f.scale, Object.assign(o, { boss: true }));
     else if (f.kind === 'golem') WB.drawGolem(ctx, f, px, py, time, o);

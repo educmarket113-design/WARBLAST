@@ -76,6 +76,10 @@ window.WB = window.WB || {};
   WB.TEAM_NAMES = ['Bleus', 'Rouges', 'Verts'];
 
   WB.MAXLV = 10;
+  // niveau de départ des capacités ramassées : monte avec le niveau du profil (1 à 3 : niv 1, 4 à 6 : niv 2, 7 à 9 : niv 3, 10 : niv 4)
+  WB.startLv = function (f) { return (f.kind === 'player' || f.kind === 'bot') ? 1 + Math.floor(((f.level || 1) - 1) / 3) : 1; };
+  // progression d'une capacité de 0 à 1 (niveau + éliminations vers le niveau suivant)
+  WB.abilProgress = function (ab) { if (ab.lvl >= 5) return 1; const a = WB.abilXp[ab.lvl - 1], b = WB.abilXp[ab.lvl]; return Math.min(1, (ab.lvl - 1 + Math.max(0, Math.min(1, (ab.kills - a) / (b - a)))) / 4); };
   WB.slotCount = function (lv) { return Math.min(lv, 6); };
   WB.chainMax = function (lv) { return lv >= 7 ? lv - 5 : 1; };
   WB.xpNeed = function (lv) { return 100 * lv; };
