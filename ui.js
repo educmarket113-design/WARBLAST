@@ -7,7 +7,7 @@
   U.sel = sel;
   // Les boutons sont recréés à chaque image : on les compare par position, pas par identité d'objet.
   // (Sinon un appui qui dure plus d'une image, donc tout appui réel au doigt, ne déclenche rien.)
-  U.sameBtn = function (a, b) { return !!a && !!b && a.id === b.id && Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && a.w === b.w && a.h === b.h; };
+  U.sameBtn = function (a, b) { return !!a && !!b && a.id === b.id && Math.abs(a.x - b.x) < 8 && Math.abs(a.y - b.y) < 8; };
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 
   // ---------- initialisation ----------
