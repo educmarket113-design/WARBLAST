@@ -225,3 +225,165 @@
 
   WB.GUIDE.water = ['Pastèque', 'Une vague d\'eau, puis, au niveau 4, une main d\'eau qui sort du sol.', ['Une seule vague qui part dans la direction du stick, blesse et repousse.', 'Deux vagues successives : la seconde repousse l\'adversaire encore plus loin.', 'Trois vagues successives, la troisième projette le plus fort. Dégâts totaux plus élevés.', 'Une grande main d\'eau sort du sol sous un seul adversaire, l\'attrape et le projette violemment.', 'Rayon d\'action visible autour de toi : une main d\'eau attrape chaque adversaire dans la zone, en même temps.']];
 })(window.WB);
+
+// ===================== FEU : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, F = A.fire;
+  F.type = 'aim'; F.col = '#ff7a1c';
+  F.range = function (L) { return L >= 5 ? 400 : L >= 3 ? 340 : 420; };
+  F.ai = { max: function (L) { return L >= 5 ? 380 : L >= 3 ? 330 : 400; }, min: 30 };
+  F.desc = 'Niv.1 : boule de feu. Niv.2 : deux boules. Niv.3 : rayon de feu continu. Niv.4 : deux rayons. Niv.5 : lance-flammes avec traces de feu au sol.';
+  const FL = { range: 390, half: 0.46, dur: 2.4, tick: 0.12, dmg: 6, patchLife: 3.6 };
+
+  function state(g) { if (!g.fireCh) { g.fireCh = []; g.flameP = []; g.flames = []; g.smoke = []; g.smokeT = 0; } return g; }
+
+  F.cast = function (f, ab, aim) {
+    const g = state(G()), L = ab.lvl, base = Math.atan2(aim.y, aim.x);
+    if (g.fireCh.some(function (c) { return c.f === f; })) return false;     // un seul jet à la fois par lanceur
+    if (L <= 2) {
+      for (let i = 0; i < L; i++) {
+        const a = base + (i - (L - 1) / 2) * 0.22;
+        g.proj({ x: f.x, y: f.y, dx: Math.cos(a), dy: Math.sin(a), speed: 560, life: 0.78, r: 13, owner: f, ab: 'fire', lvl: L, kind: 'fire',
+          onHit: function (p, t) { g.damage(t, 10 + 3 * L, f, 'fire'); g.burn(t, 16 + 7 * L, 4, f, 'fire'); g.fx('burst', p.x, p.y, { col: '#ff9a3c', n: 10, life: 0.4 }); return true; } });
+      }
+    } else if (L <= 4) {
+      const nb = L - 2, dirs = []; for (let i = 0; i < nb; i++) dirs.push(base + (i - (nb - 1) / 2) * 0.3);
+      g.fireCh.push({ f: f, ab: ab, L: L, kind: 'ray', dirs: dirs, t: 0, dur: L === 3 ? 1.1 : 1.3, acc: 0, burnAt: new Map() }); g.shake(2);
+    } else {
+      g.fireCh.push({ f: f, ab: ab, L: 5, kind: 'flame', ang: base, t: 0, dur: FL.dur, acc: 0, pAcc: 0, dropAcc: 0, burnAt: new Map() }); g.shake(3);
+    }
+    g.sfx('fire');
+  };
+
+  function inCone(f, t, ang, half, range) {
+    const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy); if (d > range + t.r) return false;
+    let da = Math.atan2(dy, dx) - ang; while (da > Math.PI) da -= PI2; while (da < -Math.PI) da += PI2;
+    return Math.abs(da) <= half + Math.atan2(t.r, Math.max(d, 1)) && G().world.los(f.x, f.y, t.x, t.y);
+  }
+  function ignite(g, c, t) { const now = c.t, last = c.burnAt.get(t); if (last == null || now - last > 0.7) { c.burnAt.set(t, now); g.burn(t, 10 + 6 * c.L, 3, c.f, 'fire'); g.fx('burst', t.x, t.y, { col: '#ff9a3c', n: 4, life: 0.3 }); } }
+
+  WB.updateFire = function (dt) {
+    const g = G(); if (!g) return; state(g);
+    for (let i = g.fireCh.length - 1; i >= 0; i--) {
+      const c = g.fireCh[i], f = c.f; c.t += dt;
+      if (!f.alive || c.t >= c.dur || f.st.frozen > 0 || f.st.stun > 0 || f.swallowed) { g.fireCh.splice(i, 1); continue; }
+      if (c.kind === 'ray') {
+        c.acc += dt; while (c.acc >= 0.1) {
+          c.acc -= 0.1;
+          for (const a of c.dirs) {
+            const dx = Math.cos(a), dy = Math.sin(a), LEN = 330; let len = LEN; for (let d = 20; d <= LEN; d += 12) { if (g.world.solidAt(f.x + dx * d, f.y + dy * d)) { len = d; break; } }
+            g.fx('beam', f.x, f.y, { x2: f.x + dx * len, y2: f.y + dy * len, life: 0.16, col: '#ff7a1c', w: 20 });
+            for (const t of g.enemiesIn(f, f.x + dx * len / 2, f.y + dy * len / 2, len / 2 + 30)) {
+              const px = t.x - f.x, py = t.y - f.y, along = px * dx + py * dy, side = Math.abs(px * dy - py * dx);
+              if (along > 0 && along < len + t.r && side < 26 + t.r * 0.6) { g.damage(t, 5, f, 'fire', { dot: true }); ignite(g, c, t); }
+            }
+          }
+        }
+      } else {
+        // lance-flammes : suit doucement l'ennemi le plus proche
+        const au = g.autoAim(f, c.ab);
+        if (au && au.target) { let da = Math.atan2(au.y, au.x) - c.ang; while (da > Math.PI) da -= PI2; while (da < -Math.PI) da += PI2; if (Math.abs(da) < 1.1) c.ang += Math.max(-2.2 * dt, Math.min(2.2 * dt, da)); }
+        const dx = Math.cos(c.ang), dy = Math.sin(c.ang);
+        c.pAcc += dt * 140; while (c.pAcc >= 1) { c.pAcc -= 1; const sp = 330 + Math.random() * 260, ja = c.ang + (Math.random() - 0.5) * FL.half * 1.7; g.flameP.push({ x: f.x + dx * 24, y: f.y + dy * 24, vx: Math.cos(ja) * sp, vy: Math.sin(ja) * sp, t: 0, life: 0.45 + Math.random() * 0.2, r: 7 + Math.random() * 8 }); }
+        c.acc += dt; while (c.acc >= FL.tick) {
+          c.acc -= FL.tick;
+          for (const t of g.enemiesIn(f, f.x, f.y, FL.range)) if (inCone(f, t, c.ang, FL.half, FL.range)) { g.damage(t, FL.dmg, f, 'fire', { dot: true }); ignite(g, c, t); }
+        }
+        c.dropAcc += dt; while (c.dropAcc >= 0.1) {
+          c.dropAcc -= 0.1; const d = 70 + Math.random() * (FL.range - 90), a = c.ang + (Math.random() - 0.5) * FL.half * 1.3, px = f.x + Math.cos(a) * d, py = f.y + Math.sin(a) * d;
+          if (!g.world.solidAt(px, py) && g.world.codeAt(px, py) !== 2 && g.world.los(f.x, f.y, px, py) && g.flames.length < 90) g.flames.push({ x: px, y: py, t: 0, life: FL.patchLife, owner: f, acc: Math.random() * 0.3, r: 13 + Math.random() * 7, ph: Math.random() * 6 });
+        }
+      }
+    }
+    for (let i = g.flameP.length - 1; i >= 0; i--) { const p = g.flameP[i]; p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= Math.exp(-1.6 * dt); p.vy *= Math.exp(-1.6 * dt); if (p.t >= p.life || g.world.solidAt(p.x, p.y)) g.flameP.splice(i, 1); }
+    // traces de feu au sol : petits dégâts de brûlure pour qui les traverse
+    for (let i = g.flames.length - 1; i >= 0; i--) {
+      const p = g.flames[i]; p.t += dt; if (p.t >= p.life) { g.flames.splice(i, 1); continue; }
+      p.acc += dt; if (p.acc >= 0.3) { p.acc -= 0.3; for (const t of g.enemiesIn(p.owner, p.x, p.y, p.r + 6)) { g.damage(t, 2, p.owner, 'fire', { dot: true }); g.burn(t, 5, 1.5, p.owner, 'fire'); } }
+    }
+    // fumée noire sur tout personnage en train de brûler
+    g.smokeT -= dt;
+    if (g.smokeT <= 0) { g.smokeT = 0.07; for (const t of g.F) if (t.alive && t.dots && t.dots.length && g.smoke.length < 140) g.smoke.push({ x: t.x + (Math.random() - 0.5) * 14, y: t.y - 14, vx: (Math.random() - 0.5) * 20, vy: -(40 + Math.random() * 25), t: 0, life: 0.9 + Math.random() * 0.4, r: 6 + Math.random() * 4 }); }
+    for (let i = g.smoke.length - 1; i >= 0; i--) { const s = g.smoke[i]; s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; if (s.t >= s.life) g.smoke.splice(i, 1); }
+  };
+
+  WB.drawFire = function (ctx, g, time) {
+    if (!g.flames) return;
+    for (const p of g.flames) {
+      const a = Math.min(1, (p.life - p.t) / 0.8), fl = 0.75 + 0.25 * Math.sin(time * 14 + p.ph);
+      ctx.save(); ctx.globalAlpha = 0.9 * a; const gr = ctx.createRadialGradient(p.x, p.y, 1, p.x, p.y, p.r * fl + 4); gr.addColorStop(0, '#fff2a0'); gr.addColorStop(0.45, '#ff9a2c'); gr.addColorStop(1, 'rgba(210,50,10,0)');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(p.x, p.y - 3, p.r * fl + 4, 0, PI2); ctx.fill();
+      ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.moveTo(p.x - 5, p.y + 2); ctx.quadraticCurveTo(p.x - 3, p.y - p.r * fl, p.x, p.y - p.r * fl - 6); ctx.quadraticCurveTo(p.x + 3, p.y - p.r * fl, p.x + 5, p.y + 2); ctx.closePath(); ctx.fill(); ctx.restore();
+    }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const p of g.flameP) { const u = p.t / p.life, r = p.r * (0.6 + u * 1.1); ctx.globalAlpha = Math.max(0, 0.85 * (1 - u)); ctx.fillStyle = u < 0.25 ? '#fff0a0' : u < 0.55 ? '#ffa030' : '#e04810'; ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, PI2); ctx.fill(); }
+    ctx.restore();
+    for (const s of g.smoke) { const u = s.t / s.life; ctx.globalAlpha = 0.55 * (1 - u); ctx.fillStyle = '#1c1c20'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r * (1 + u * 1.2), 0, PI2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+  };
+
+  // branchement sur les rappels existants (mise à jour et dessin)
+  const upd = WB.updateHands, drw = WB.drawHands;
+  WB.updateHands = function (dt) { upd(dt); WB.updateFire(dt); };
+  WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawFire(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.fire = ['Piment', 'Boules de feu, rayons, puis lance-flammes. La brûlure fait de la fumée noire et des dégâts jusqu\'à l\'extinction.', ['Une boule de feu qui enflamme la cible.', 'Deux boules de feu lancées ensemble.', 'Un rayon de feu continu qui brûle tout sur sa trajectoire.', 'Deux rayons de feu simultanés.', 'Lance-flammes de 2,4 s : large, longue portée, touche plusieurs ennemis et laisse des flammes au sol qui brûlent légèrement.']];
+
+// ===================== FUSION DES CAPACITÉS (niveau 7 et plus) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2;
+  const STEP = 0.6;                                  // délai entre deux attaques enchaînées
+  function members(f) { const lo = f.loadout || [], out = []; for (const i of lo) { const ab = i != null ? f.slots[i] : null; if (ab && !(ab.id === 'summon' && !ab.form)) out.push(ab); } return out; }
+  WB.fusionMembers = members;
+  WB.canFuse = function (f) { return (f.level || 1) >= 7 && !f.fusion && members(f).length >= 2; };
+  WB.fusionLevel = function (f) { const fu = f.fusion; if (!fu) return 1; let s = 0; fu.abs.forEach(function (a) { s += a.lvl; }); return Math.max(1, Math.min(5, Math.ceil(s / fu.abs.length))); };
+  WB.fuse = function (f) {
+    if (!WB.canFuse(f)) return false; const abs = members(f);
+    f.fusion = { abs: abs, ids: abs.map(function (a) { return a.id; }) }; if (f.fusionCd == null) f.fusionCd = 0;
+    const g = G(); g.fx('ring', f.x, f.y, { r: 70, col: '#ffe27a', life: 0.5, w: 8 }); g.fx('burst', f.x, f.y, { col: '#fff3b0', n: 22, life: 0.6 }); g.sfx('pickup'); return true;
+  };
+  WB.unfuse = function (f) { if (!f.fusion) return false; f.fusion = null; G().fx('ring', f.x, f.y, { r: 50, col: '#bfc8e8', life: 0.4, w: 5 }); return true; };
+  WB.fusionCooldown = function (f) { return 7 + 2.5 * (f.fusion ? f.fusion.abs.length : 2); };   // nettement plus long que les recharges normales
+  WB.fusionCharges = function (f) { let m = 5; if (f.fusion) f.fusion.abs.forEach(function (a) { m = Math.min(m, a.n == null ? 5 : a.n); }); return m; };
+  WB.fusionReady = function (f) {
+    const g = G(); if (!f.fusion || !g.canCast(f) || (f.fusionCd || 0) > 0 || f.fusion.busy) return false;
+    return f.fusion.abs.every(function (a) { return f.slots.indexOf(a) >= 0 && a.cd <= 0 && (a.n == null || a.n > 0); });
+  };
+
+  // attaque fusionnée : chaque capacité part à son tour sur l'adversaire le plus proche encore disponible, puis une attaque combinée termine la série
+  WB.castFusion = function (f) {
+    const g = G(), fu = f.fusion; if (!WB.fusionReady(f)) return false;
+    const fl = WB.fusionLevel(f), abs = fu.abs.slice(), n = abs.length;
+    const first = g.nearest(f, 520); if (!first) return false;
+    fu.busy = true; f.fusionCd = WB.fusionCooldown(f);
+    abs.forEach(function (ab) { const def = A[ab.id]; ab.n = (ab.n == null ? 5 : ab.n) - 1; if (ab.n <= 0) { ab.n = 0; ab.cd = def.cd(ab.lvl) * WB.cdMul(ab.id); } });
+    let used = [], lastT = first;
+    abs.forEach(function (ab, k) {
+      g.later(k * STEP, function () {
+        if (!f.alive || !f.fusion || f.st.frozen > 0 || f.swallowed) { if (f.fusion) f.fusion.busy = false; return; }
+        const def = A[ab.id], R = def.range(fl); let best = null, bd = 1e9;
+        for (const t of g.F) { if (!t.alive || t.team === f.team || t.st.jump || t.ghost) continue; const d = Math.hypot(t.x - f.x, t.y - f.y); if (d > R * 1.2) continue; const pen = used.indexOf(t) >= 0 ? 400 : 0; if (d + pen < bd) { bd = d + pen; best = t; } }
+        if (!best) best = lastT && lastT.alive ? lastT : null;
+        if (best) { used.push(best); lastT = best; const d = Math.hypot(best.x - f.x, best.y - f.y) || 1, aim = { x: (best.x - f.x) / d, y: (best.y - f.y) / d, m: Math.max(0.25, Math.min(1, d / R)), target: best }, tmp = Object.assign({}, ab, { lvl: fl });
+          g.muteSfx = true; try { def.cast(f, tmp, aim); } finally { g.muteSfx = false; } f.castT = 0.4; f.aimLast = { x: aim.x, y: aim.y }; g.fx('ring', f.x, f.y, { r: 34, col: def.col, life: 0.3, w: 5 }); try { WB.snd.play('ab_' + ab.id, 0.8); } catch (e) {} }
+        if (k === n - 1) g.later(0.45, function () {
+          if (f.fusion) f.fusion.busy = false; if (!f.alive) return; const T = lastT && lastT.alive ? lastT : null; if (!T) return;
+          const R = 120 + 12 * n, dmg = 14 + 9 * n; g.fx('ring', T.x, T.y, { r: R, col: '#ffe27a', life: 0.55, w: 10 }); g.fx('ring', T.x, T.y, { r: R * 0.65, col: '#ff7a7a', life: 0.45, w: 7 });
+          abs.forEach(function (a, i) { g.fx('burst', T.x, T.y, { col: A[a.id].col, n: 14, life: 0.7 }); }); g.splash(f, T.x, T.y, R, dmg, 'fusion', { knock: 420 }); g.shake(7); g.sfx('boom');
+        });
+      });
+    });
+    g.shake(3); return true;
+  };
+
+  const upd = WB.updateHands;
+  WB.updateHands = function (dt) {
+    upd(dt); const g = G(); if (!g) return;
+    for (const f of g.F) {
+      if (f.fusionCd > 0) f.fusionCd = Math.max(0, f.fusionCd - dt);
+      if (f.fusion && (!f.alive || f.fusion.abs.some(function (a) { return f.slots.indexOf(a) < 0; }))) f.fusion = null;
+    }
+  };
+})(window.WB);

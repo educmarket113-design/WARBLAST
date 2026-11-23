@@ -97,7 +97,7 @@
     return [{ x: 0, y: -46, r: 20 }, { x: 46, y: 0, r: 20 }, { x: 0, y: 46, r: 20 }, { x: -46, y: 0, r: 20 }, { x: 0, y: 0, r: 20 }];
   }
   U.assignAtk = function (i, pos) {
-    const f = WB.G.player, ab = f.slots[i]; if (!ab) return false; normLoadout(f); const lo = f.loadout, mx = lo.length;
+    const f = WB.G.player, ab = f.slots[i]; if (!ab) return false; if (f.fusion) { U.showToast('Défusionne pour changer les capacités', '#ffd0a0'); return false; } normLoadout(f); const lo = f.loadout, mx = lo.length;
     const was = lo.indexOf(i);
     if (mx === 1) { lo[0] = i; WB.snd.play('click'); return true; }
     if (was >= 0 && pos == null) return false;
@@ -105,7 +105,7 @@
     let p = pos; if (p == null) { p = lo.indexOf(null); if (p < 0) p = 0; }
     lo[p] = i; WB.snd.play('click'); return true;
   };
-  U.unassignAtk = function (i) { const f = WB.G.player; normLoadout(f); const k = f.loadout.indexOf(i); if (k >= 0 && f.loadout.length > 1) { f.loadout[k] = null; return true; } return false; };
+  U.unassignAtk = function (i) { const f = WB.G.player; if (f.fusion) { U.showToast('Défusionne pour changer les capacités', '#ffd0a0'); return false; } normLoadout(f); const k = f.loadout.indexOf(i); if (k >= 0 && f.loadout.length > 1) { f.loadout[k] = null; return true; } return false; };
   function drawAbilityDisc(ctx, f, ab, cx, cy, r, o) {
     const def = A[ab.id], G = WB.G, n = ab.n == null ? 5 : ab.n, recharge = ab.cd > 0, blocked = f.st.silence > 0 || f.st.frozen > 0 || f.swallowed, mx = def.cd(ab.lvl) * WB.cdMul(ab.id);
     ctx.save(); ctx.globalAlpha = o.drag ? 0.9 : 1;
@@ -145,7 +145,7 @@
       const at = U.atk, pf = G.player;
       if (at && pf && pf.alive && !G.over) {
         for (let i = 0; i < at.pos.length; i++) { const p = at.pos[i]; if (Math.hypot(x - (p.x + at.sw / 2), y - (p.y + at.sw / 2)) <= at.sw / 2 + 6) { if (G.swap) { castSlot(i); return; } if (pf.slots[i] && !U.dragSlot) U.dragSlot = { id: id, i: i, x: x, y: y, sx: x, sy: y, moved: false }; return; } }
-        if (Math.hypot(x - at.A.x, y - at.A.y) <= at.R + 10 && !sticks.atk) { let only = null; at.icons.forEach(function (ic, k) { if (pf.loadout[k] != null && Math.hypot(x - (at.A.x + ic.x), y - (at.A.y + ic.y)) <= ic.r + 4) only = pf.loadout[k]; }); sticks.atk = { id: id, x: x, y: y, only: only }; return; }
+        if (Math.hypot(x - at.A.x, y - at.A.y) <= at.R + 10 && !sticks.atk) { let only = null; at.icons.forEach(function (ic, k) { if (pf.loadout[k] != null && Math.hypot(x - (at.A.x + ic.x), y - (at.A.y + ic.y)) <= ic.r + 4) only = pf.loadout[k]; }); sticks.atk = { id: id, x: x, y: y, only: only }; tapFire(only); return; }
       }
       const b = U.findBtn(x, y);
       if (b) { U.setPressed(b); if (b.instant && b.fn) { b.fn(); U.setPressed(null); } return; }
@@ -177,8 +177,22 @@
     const sx = (G.player.x - v.x0) * v.z, sy = (G.player.y - v.y0) * v.z, dx = U.mousePx - sx, dy = U.mousePy - sy, d = Math.hypot(dx, dy) || 1;
     return { x: dx / d, y: dy / d, m: clamp(d / (360 * v.z), 0.2, 1) };
   }
+  // appui direct sur la capacité (ou sur l'analogue) : tir automatique sur l'adversaire le plus proche, sans bouger l'analogue
+  const NOTARGET_OK = { shield: 1, invis: 1 };
+  function tapFire(only) {
+    const G = WB.G, f = G.player; if (!f || !f.alive || !G.started || G.over || f.thrall || f.swallowed) return;
+    if (f.fusion) { if (!WB.fusionReady(f)) { U.showToast((f.fusionCd || 0) > 0 ? 'Fusion en recharge : ' + Math.ceil(f.fusionCd) + ' s' : 'Fusion indisponible', '#ffd0a0'); return; } if (!WB.castFusion(f)) U.showToast('Aucun adversaire à portée', '#ffd0a0'); return; }
+    const list = only != null ? [only] : f.loadout.filter(function (v) { return v != null; }); let fired = 0, noTarget = false;
+    for (const i of list) {
+      const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
+      const au = G.autoAim(f, ab); if (!au.target && !NOTARGET_OK[ab.id]) { noTarget = true; continue; }
+      if (G.useSlot(f, i, au)) fired++;
+    }
+    if (!fired && noTarget) U.showToast('Aucun adversaire à portée', '#ffd0a0');
+  }
   function attackStick() {
     const st = sticks.atk, G = WB.G, f = G.player; if (!st || !f || !f.alive || !G.started || G.over || f.thrall || f.swallowed || !U.atk) return;
+    if (f.fusion) { if (st.pushT == null) st.pushT = 0; const dx0 = st.x - U.atk.A.x, dy0 = st.y - U.atk.A.y; if (Math.hypot(dx0, dy0) >= U.atk.R * 0.28 && WB.fusionReady(f)) WB.castFusion(f); return; }
     const dx = st.x - U.atk.A.x, dy = st.y - U.atk.A.y, d = Math.hypot(dx, dy), R = U.atk.R; if (d < R * 0.28) return;
     const ux = dx / d, uy = dy / d, m = clamp(d / R, 0.25, 1), list = st.only != null ? [st.only] : f.loadout.filter(function (v) { return v != null; });
     for (const i of list) {
@@ -337,14 +351,31 @@
       ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(A0.x, A0.y, R * 0.28, 0, PI2); ctx.stroke();
       const hov = dr && dr.moved && Math.hypot(dr.x - A0.x, dr.y - A0.y) <= R + 16;
       if (hov) { ctx.strokeStyle = 'rgba(255,255,255,' + (0.5 + 0.5 * pulse) + ')'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(A0.x, A0.y, R + 6, 0, PI2); ctx.stroke(); }
-      for (let k = 0; k < icons.length; k++) {
+      const fused = !!f.fusion;
+      for (let k = 0; !fused && k < icons.length; k++) {
         const ic = icons[k], ix = A0.x + ic.x, iy = A0.y + ic.y, i = f.loadout[k], ab = i != null ? f.slots[i] : null;
         if (!ab) { ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(255,255,255,' + (dr && dr.moved ? 0.6 + 0.3 * pulse : 0.3) + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(ix, iy, ic.r, 0, PI2); ctx.stroke(); ctx.setLineDash([]); continue; }
         drawAbilityDisc(ctx, f, ab, ix, iy, ic.r, { badge: true, time: time, only: st && st.only === i });
       }
+      if (fused) {
+        const fr = 38, cdm = WB.fusionCooldown(f), cdv = f.fusionCd || 0, ready = WB.fusionReady(f), mem = f.fusion.abs, nm = mem.length;
+        const gr = ctx.createRadialGradient(A0.x, A0.y - 6, 4, A0.x, A0.y, fr); gr.addColorStop(0, '#fff3b0'); gr.addColorStop(0.6, '#e8a21c'); gr.addColorStop(1, '#7a4a08'); ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(A0.x, A0.y, fr, 0, PI2); ctx.fill();
+        ctx.lineWidth = 4; ctx.strokeStyle = ready ? '#ffffff' : '#8a7a5a'; if (ready) { ctx.shadowColor = '#ffe27a'; ctx.shadowBlur = 10 + 8 * pulse; } ctx.stroke(); ctx.shadowBlur = 0;
+        for (let k = 0; k < nm; k++) { const an = -Math.PI / 2 + k * PI2 / nm + time * 0.8; WB.drawIcon(ctx, mem[k].id, A0.x + Math.cos(an) * 24, A0.y + Math.sin(an) * 24 - 2, 20); }
+        if (cdv > 0) { ctx.fillStyle = 'rgba(5,8,24,.62)'; ctx.beginPath(); ctx.moveTo(A0.x, A0.y); ctx.arc(A0.x, A0.y, fr - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(cdv / cdm, 0, 1)); ctx.closePath(); ctx.fill(); text(String(Math.ceil(cdv)), A0.x, A0.y + 6, 22, '#fff', 'center', 4); }
+        else text('FUSION', A0.x, A0.y + 5, 13, '#3a2300', 'center');
+        text('Niv.' + WB.fusionLevel(f), A0.x - fr + 8, A0.y - fr + 4, 11, '#ffe9a8', 'center', 3); text(WB.fusionCharges(f) + '/5', A0.x + fr - 8, A0.y + fr - 2, 11, '#fff', 'center', 3);
+      }
       if (!f.loadout.some(function (v) { return v != null; })) { text(n ? 'Glisse une capacité' : 'Ramasse un fruit', A0.x, A0.y - R - 14, 13, '#ffe9a8', 'center', 3); if (n && sy) { ctx.strokeStyle = 'rgba(255,233,168,' + (0.4 + 0.5 * pulse) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x, A0.y, R + 8, 0, PI2); ctx.stroke(); } }
       if (st) { const dx = st.x - A0.x, dy = st.y - A0.y, d = Math.hypot(dx, dy), q = d > R ? R / d : 1; ctx.fillStyle = 'rgba(255,230,160,.9)'; ctx.strokeStyle = 'rgba(120,70,10,.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x + dx * q, A0.y + dy * q, 16, 0, PI2); ctx.fill(); ctx.stroke(); }
       ctx.restore();
+    }
+    // boutons de fusion (niveau 7 et plus)
+    if ((f.level || 1) >= 7 && f.alive && !G.over) {
+      const bw = 118, bh = 34, fx0 = A0.x - bw / 2, fy0 = A0.y - R - 14 - bh;
+      if (f.fusion) btn(fx0, fy0, bw, bh, { label: 'DÉFUSIONNER', size: 14, style: 'gray', fn: function () { WB.unfuse(f); } });
+      else if (WB.canFuse(f)) btn(fx0, fy0, bw, bh, { label: 'FUSIONNER', size: 15, style: 'gold', fn: function () { if (!WB.fuse(f)) U.showToast('Place au moins 2 capacités dans l\'analogue', '#ffd0a0'); } });
+      else if (f.loadout.filter(function (v) { return v != null; }).length < 2) { text('Fusion : 2 capacités minimum', A0.x, fy0 + 14, 12, 'rgba(255,233,168,.8)', 'center', 3); }
     }
     // capacité en cours de déplacement
     if (dr && dr.moved && f.slots[dr.i]) drawAbilityDisc(ctx, f, f.slots[dr.i], dr.x, dr.y, sw / 2 + 4, { time: time, drag: true });
