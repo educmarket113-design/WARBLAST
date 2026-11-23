@@ -719,3 +719,71 @@ WB.GUIDE.wind = ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs
   WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawIce(ctx, g, time); };
 })(window.WB);
 WB.GUIDE.ice = ['Myrtilles givrées', 'Gel, piques de glace et piège.', ['Une zone autour de toi gèle le plus proche ennemi qui y entre.', 'La zone gèle tous les ennemis qui y entrent, un peu plus fort.', 'Des piques jaillissent du sol, poursuivent la cible, la transpercent et la gèlent.', 'Cercles de piques en expansion à 360° : dégâts répétés et ralentissement, sans gel.', 'Piège de glace posé où tu veux : ralentit puis gèle, et finit par une explosion de piques.']];
+
+// ===================== TROU NOIR : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, H = A.hole;
+  // niveaux 1 à 4 : [rayon d'aspiration, rayon du centre, nombre d'ennemis à absorber] ; niveau 5 : suit le joueur
+  const T = { 1: [100, 38, 1], 2: [130, 44, 2], 3: [145, 48, 3], 4: [160, 52, 4], 5: [150, 62, 99] };
+  const LIFE = { 1: 8, 2: 20, 3: 20, 4: 20, 5: 4 };      // secondes d'attente (niveaux 1 à 4) ; durée d'activation (niveau 5)
+  H.cd = function (L) { return L >= 5 ? 26 : 18; };        // recharge après 2 utilisations
+  H.range = function (L) { return L >= 5 ? T[5][0] : 280; };
+  H.desc = 'Niv.1 : absorbe 1 ennemi puis se referme. Niv.2 à 4 : reste ouvert jusqu\'à 2, 3 ou 4 ennemis absorbés. Niv.5 : suit le joueur 4 s et absorbe tout ce qui entre. 2 utilisations avant recharge.';
+  H.ai = { max: function (L) { return L >= 5 ? 160 : 300; }, min: 0 };
+
+  H.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl; g.bh = g.bh || [];
+    if (L >= 5 && g.bh.some(function (h) { return h.f === f && h.follow && !h.closing; })) return false;
+    let x = f.x, y = f.y;
+    if (L < 5) { const d = Math.max(60, H.range(L) * Math.max(0.25, Math.min(1, aim.m == null ? 0.6 : aim.m))); x = f.x + aim.x * d; y = f.y + aim.y * d; if (g.world.solidAt(x, y)) { x = f.x + aim.x * 70; y = f.y + aim.y * 70; } }
+    g.bh.push({ f: f, L: L, x: x, y: y, pull: T[L][0], core: T[L][1], cap: T[L][2], got: 0, age: 0, life: LIFE[L], follow: L >= 5, closing: 0 });
+    g.fx('ring', x, y, { r: T[L][0], col: '#b080ff', life: 0.5, w: 6 }); g.sfx('hole');
+  };
+
+  function absorb(g, h, t) {
+    g.fx('burst', t.x, t.y, { col: '#b080ff', n: 16, life: 0.6 }); g.fx('ring', t.x, t.y, { r: 36, col: '#e8d8ff', life: 0.35, w: 4 });
+    if (h.L === 1 && t.kind === 'boss') g.damage(t, t.maxhp * 0.35, h.f, 'hole');          // niveau 1 : comportement d'origine contre les boss
+    else { t.st.shield = 0; t.st.invuln = 0; g.damage(t, 99999, h.f, 'hole'); }
+    h.got++;
+  }
+
+  WB.updateBlackHoles = function (dt) {
+    const g = G(); if (!g || !g.bh) return;
+    for (let i = g.bh.length - 1; i >= 0; i--) {
+      const h = g.bh[i], f = h.f; h.age += dt;
+      if (h.closing > 0) { h.closing -= dt; if (h.closing <= 0) g.bh.splice(i, 1); continue; }
+      if (h.follow) { if (!f.alive) { h.closing = 0.2; continue; } h.x = f.x; h.y = f.y + 4; }
+      const inCore = [];
+      for (const t of g.F) {
+        if (!t.alive || t.team === f.team || t.st.jump || t.ghost || t.swallowed) continue;
+        const dx = h.x - t.x, dy = h.y - t.y, d = Math.hypot(dx, dy); if (d > h.pull + t.r) continue;
+        if (h.L >= 5) { inCore.push([d, t]); continue; }                                        // niveau 5 : tout ennemi qui entre est absorbé
+        const pull = (t.kind === 'boss' ? 160 : 420) * dt; t.x += dx / (d || 1) * Math.min(pull, d); t.y += dy / (d || 1) * Math.min(pull, d); g.world.collide(t, g.walls);
+        if (d < h.core && !(t.st.invuln > 0 && !t.st.shield)) inCore.push([d, t]);
+      }
+      inCore.sort(function (a, b) { return a[0] - b[0]; });
+      for (const [d, t] of inCore) { if (h.got >= h.cap) break; absorb(g, h, t); }
+      if (h.got >= h.cap) h.closing = 0.35;
+      else if (h.age >= h.life) h.closing = 0.4;
+    }
+  };
+
+  WB.drawBlackHoles = function (c, g, time) {
+    if (!g.bh) return;
+    for (const h of g.bh) {
+      const open = Math.min(1, h.age / 0.4), shut = h.closing > 0 ? Math.max(0, h.closing / (h.got >= h.cap ? 0.35 : 0.4)) : 1, u = open * shut, r = (h.L >= 5 ? h.pull : h.pull * 0.92) * u;
+      if (r < 2) continue; c.save(); c.translate(h.x, h.y);
+      const gr = c.createRadialGradient(0, 0, 4, 0, 0, r); gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.4, 'rgba(24,6,50,.92)'); gr.addColorStop(1, 'rgba(140,80,240,0)'); c.fillStyle = gr; c.beginPath(); c.arc(0, 0, r, 0, PI2); c.fill();
+      c.strokeStyle = 'rgba(210,170,255,.75)'; c.lineWidth = 2.5; c.rotate(time * 5); for (let k = 0; k < 3; k++) { c.rotate(PI2 / 3); c.beginPath(); for (let a = 0; a < 4.2; a += 0.15) { const rr = 6 + a * r * 0.2; c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } c.stroke(); }
+      c.rotate(-time * 5); c.strokeStyle = 'rgba(190,140,255,.55)'; c.lineWidth = 2; c.setLineDash([8, 8]); c.beginPath(); c.arc(0, 0, h.core * u, 0, PI2); c.stroke(); c.setLineDash([]);
+      if (h.L >= 5) { const left = Math.max(0, h.life - h.age) / h.life; c.strokeStyle = 'rgba(255,255,255,.8)'; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, r + 6, -Math.PI / 2, -Math.PI / 2 + PI2 * left); c.stroke(); }
+      else if (h.cap > 1) { for (let k = 0; k < h.cap; k++) { c.fillStyle = k < h.got ? '#ffffff' : 'rgba(20,0,40,.8)'; c.strokeStyle = '#c8a8ff'; c.lineWidth = 1.5; c.beginPath(); c.arc((k - (h.cap - 1) / 2) * 14, -r - 8, 4.5, 0, PI2); c.fill(); c.stroke(); } }
+      c.restore();
+    }
+  };
+  const upd = WB.updateHands, drw = WB.drawHands;
+  WB.updateHands = function (dt) { upd(dt); WB.updateBlackHoles(dt); };
+  WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawBlackHoles(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.hole = ['Prune noire', 'Aspire et élimine les ennemis. 2 utilisations seulement avant recharge.', ['Un petit trou noir absorbe 1 ennemi puis se referme.', 'Plus grand : reste ouvert jusqu\'à avoir absorbé 2 ennemis.', 'Même principe, 3 ennemis à absorber.', 'Même principe, 4 ennemis à absorber.', 'Le trou noir se colle sous toi 4 s et absorbe tout ennemi qui entre dans sa zone.']];

@@ -118,7 +118,7 @@
     // charges restantes x/5
     const bw = Math.max(26, r * 0.9), bh = 15, bxx = cx + r * 0.55 - bw / 2 + 2, byy = cy + r - 8;
     ctx.fillStyle = recharge ? '#7a2a2a' : n <= 1 ? '#a8631a' : '#16213f'; ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = 1.5; U.rr(ctx, cx - bw / 2, byy - bh / 2 + 4, bw, bh, 7); ctx.fill(); ctx.stroke();
-    text(n + '/5', cx, byy + 5, 11, '#fff', 'center', 3);
+    text(n + '/' + WB.maxCharges(ab), cx, byy + 5, 11, '#fff', 'center', 3);
     if (o.dots) { for (let k = 0; k < 5; k++) { ctx.fillStyle = k < ab.lvl ? '#ffd24a' : 'rgba(255,255,255,.2)'; ctx.beginPath(); ctx.arc(cx - 16 + k * 8, cy - r - 5, 2.7, 0, PI2); ctx.fill(); } }
     ctx.restore();
   }

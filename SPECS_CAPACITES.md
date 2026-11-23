@@ -79,3 +79,13 @@ Dégâts et gel ajustés pour l'équilibrage. Recharge après 5 utilisations : 7
 | 5 | Piège posé à l'endroit visé (ou devant le joueur, même sans ennemi) : grande sphère transparente à flocons, rayon 120 px, armée 10 s. L'ennemi qui y entre est ralenti progressivement (jusqu'à 95 %) puis gelé après 1,6 s de présence ; gel de 1,8 s ; juste avant la fin du gel, piques sur toute la surface | 300 (distance de pose) | 60 dégâts aux ennemis gelés, ils sont libérés, la zone disparaît ; un ennemi qui sort à temps n'est pas gelé |
 
 Choix d'équilibrage : un seul gel par ennemi et par zone, pas de gel pendant le niveau 4, explosion du niveau 5 limitée à 60 dégâts (moins du quart des PV d'un joueur de niveau 1), gel limité à 1,8 s, ennemis libres de sortir pendant les 1,6 s de ralentissement.
+
+## TROU NOIR (niveaux 1 à 5) — en attente de validation
+
+- Charges : 2 seulement pour le trou noir (les autres capacités gardent 5). Recharge à 0 charge : 18 s (niv. 1-4), 26 s (niv. 5).
+- Niv. 1 : portée 280, aspire en 8 s max, absorbe 1 ennemi (le boss perd 35 % de sa vie au lieu d'être tué).
+- Niv. 2 : absorbe 2 ennemis, durée max 20 s. Niv. 3 : 3 ennemis. Niv. 4 : 4 ennemis.
+- Niv. 1-4 : le trou reste en place, attire les ennemis (420 px/s, boss 160), absorbe ceux qui touchent le cœur, se ferme (0,35 s) quand la capacité est atteinte ou le temps écoulé. Les points affichent la capacité restante.
+- Niv. 5 : trou de rayon 150 qui suit le lanceur pendant 4 s, absorbe instantanément tout ennemi dans le rayon, anneau de temps visible. Un seul trou niv. 5 à la fois.
+- L'absorption ignore bouclier et invulnérabilité de capacité.
+- Tests : t83 (19/19), régressions t60 40/40, t72 15/15, t70/t74/t79/t81 sans erreur JS. Non testé : téléphone réel, multijoueur.

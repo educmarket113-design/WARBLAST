@@ -336,5 +336,7 @@
     let r = Math.random() * tot; for (const k of WB.ABIL_IDS) { r -= WB.ABIL_WEIGHT[k] || 5; if (r <= 0) return k; }
     return 'fire';
   };
-  WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: 5, gap: 0 }; };
+  // nombre d'utilisations avant recharge : 5 pour toutes les capacités, 2 pour le trou noir
+  WB.maxCharges = ab => (ab && ab.id === 'hole') ? 2 : 5;
+  WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: WB.maxCharges({ id: id }), gap: 0 }; };
 })(window.WB);
