@@ -604,3 +604,118 @@ WB.GUIDE.wind = ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs
     if (g.forks) for (const a of g.forks) for (const fk of a.forks) if (fk.cur) { const ps = fk.cur, len = a.R * ps.ext; WB.drawFork(ctx, a.f.x, a.f.y - 4, ps.ang, len, fk.sc, time, fk.skull); }
   };
 })(window.WB);
+
+// ===================== GLACE : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, I = A.ice;
+  // valeurs d'équilibrage : [dégâts, durée de gel]
+  const V = { 1: [20, 1.4], 2: [24, 1.7], 3: [34, 1.7], 4: [14, 0], 5: [60, 1.8] };
+  const TRAP = { r: 120, life: 10, fill: 1.6, place: 300 };       // piège niveau 5 : rayon, attente max, secondes dans la zone avant le gel complet
+  I.type = 'zone';
+  I.cd = function (L) { return [7, 7, 7, 8, 10][L - 1]; };
+  I.range = function (L) { return [170, 190, 210, 260, TRAP.place][L - 1]; };
+  I.ai = { max: function (L) { return L >= 5 ? 230 : I.range(L) - 20; }, min: 0 };
+  I.desc = 'Niv.1 : gèle le plus proche. Niv.2 : gèle tous les ennemis de la zone. Niv.3 : piques qui poursuivent. Niv.4 : cercles de piques (ralentit). Niv.5 : piège de glace avec explosion de piques.';
+
+  function foes(g, f, x, y, r) { const out = []; for (const t of g.F) { if (!t.alive || t.team === f.team || t.st.jump || t.ghost || t.swallowed) continue; if (Math.hypot(t.x - x, t.y - y) <= r + t.r * 0.5) out.push(t); } return out; }
+  function freeze(g, f, t, dmg, dur) { g.damage(t, dmg, f, 'ice'); if (dur > 0) g.status(t, 'frozen', dur); g.fx('burst', t.x, t.y, { col: '#d8f6ff', n: 12, life: 0.5 }); g.fx('ring', t.x, t.y, { r: 46, col: '#bff0ff', life: 0.4, w: 5 }); }
+
+  I.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl; g.iceZ = g.iceZ || [];
+    const z = { f: f, L: L, t: 0, done: new Set(), seed: Math.random() * 6 };
+    if (L <= 3) Object.assign(z, { kind: L === 3 ? 'seek' : 'aura', r: I.range(L), life: 3.2 });
+    else if (L === 4) Object.assign(z, { kind: 'rings', x: f.x, y: f.y, radii: [70, 130, 190, 250], life: 2.4, hits: [new Set(), new Set(), new Set(), new Set()] });
+    else {
+      let d = 60 + (aim.m == null ? 0.5 : Math.min(1, aim.m)) * 200, ax = aim.x, ay = aim.y;
+      if (aim.target) { const dx = aim.target.x - f.x, dy = aim.target.y - f.y, dd = Math.hypot(dx, dy) || 1; d = Math.min(dd, TRAP.place); ax = dx / dd; ay = dy / dd; }
+      let px = f.x + ax * d, py = f.y + ay * d; for (let k = 0; k < 8 && g.world.solidAt(px, py); k++) { d *= 0.85; px = f.x + ax * d; py = f.y + ay * d; }
+      Object.assign(z, { kind: 'trap', x: px, y: py, r: TRAP.r, life: TRAP.life, prog: new Map(), exploded: false });
+      g.fx('ring', px, py, { r: TRAP.r, col: '#bff0ff', life: 0.5, w: 6 });
+    }
+    g.iceZ.push(z); g.fx('snow', f.x, f.y, { r: 90, life: 0.5 }); g.sfx('ice');
+  };
+
+  WB.updateIce = function (dt) {
+    const g = G(); if (!g || !g.iceZ) return;
+    for (let i = g.iceZ.length - 1; i >= 0; i--) {
+      const z = g.iceZ[i], f = z.f, L = z.L; z.t += dt;
+      if (z.kind === 'aura' || z.kind === 'seek') {
+        if (!f.alive) { g.iceZ.splice(i, 1); continue; }
+        const [dmg, dur] = V[L], inside = foes(g, f, f.x, f.y, z.r).filter(function (t) { return !z.done.has(t); });
+        if (z.kind === 'aura' && L === 1) {                    // un seul ennemi à la fois : le plus proche
+          if (!(z.cur && z.cur.alive && z.cur.st.frozen > 0) && z.t < z.life - 0.4 && inside.length) { inside.sort(function (a, b) { return Math.hypot(a.x - f.x, a.y - f.y) - Math.hypot(b.x - f.x, b.y - f.y); }); z.cur = inside[0]; z.done.add(z.cur); freeze(g, f, z.cur, dmg, dur); }
+        } else if (z.kind === 'aura') { for (const t of inside) { z.done.add(t); freeze(g, f, t, dmg, dur); } }
+        else if (!z.train && !z.fired && inside.length) {      // niveau 3 : piques qui poursuivent la cible
+          inside.sort(function (a, b) { return Math.hypot(a.x - f.x, a.y - f.y) - Math.hypot(b.x - f.x, b.y - f.y); }); z.fired = true; z.train = { x: f.x, y: f.y, tg: inside[0], path: [{ x: f.x, y: f.y, t: z.t }], t0: z.t, hit: false };
+        }
+        const tr = z.train;
+        if (tr && !tr.hit) {
+          const t = tr.tg; if (!t.alive || z.t - tr.t0 > 2.2) tr.hit = true; else {
+            const dx = t.x - tr.x, dy = t.y - tr.y, d = Math.hypot(dx, dy) || 1, st = Math.min(d, 520 * dt);
+            tr.x += dx / d * st; tr.y += dy / d * st; const lp = tr.path[tr.path.length - 1]; if (Math.hypot(tr.x - lp.x, tr.y - lp.y) > 15) tr.path.push({ x: tr.x, y: tr.y, t: z.t });
+            if (d < 22 + t.r) { tr.hit = true; tr.hitT = z.t; freeze(g, f, t, dmg, dur); g.fx('ring', t.x, t.y, { r: 60, col: '#ffffff', life: 0.35, w: 6 }); }
+          }
+        }
+        if (z.t >= z.life && (!tr || tr.hit)) g.iceZ.splice(i, 1);
+      } else if (z.kind === 'rings') {
+        z.radii.forEach(function (r, k) {
+          const t0 = 0.15 + 0.4 * k, u = z.t - t0; if (u < 0 || u > 0.9) return; if (u > 0.2 && u < 0.65 || u <= 0.2) {   // active pendant la sortie et le maintien
+            for (const t of g.F) { if (!t.alive || t.team === f.team || t.st.jump || t.ghost || z.hits[k].has(t)) continue; const d = Math.hypot(t.x - z.x, t.y - z.y); if (Math.abs(d - r) > 32 + t.r * 0.4) continue;
+              z.hits[k].add(t); g.damage(t, V[4][0], f, 'ice'); t.st.slowT = 2.2; t.st.slowMax = 2.2; t.st.slowAmt = 0.55; g.fx('burst', t.x, t.y, { col: '#d8f6ff', n: 8, life: 0.4 }); }
+          }
+        });
+        if (z.t >= z.life) g.iceZ.splice(i, 1);
+      } else {   // piège
+        if (z.exploded) { if (z.t >= z.exT + 0.6) g.iceZ.splice(i, 1); continue; }
+        const inside = foes(g, f, z.x, z.y, z.r), now = new Set(inside);
+        for (const t of inside) {
+          let p = (z.prog.get(t) || 0) + dt; z.prog.set(t, p);
+          if (!(t.st.frozen > 0)) { if (p >= TRAP.fill && !z.done.has(t)) { z.done.add(t); g.status(t, 'frozen', V[5][1]); g.fx('burst', t.x, t.y, { col: '#d8f6ff', n: 14, life: 0.6 }); if (!z.exAt) z.exAt = z.t + V[5][1] - 0.12; } else if (!z.done.has(t)) { t.st.slowT = 0.25; t.st.slowMax = 0.25; t.st.slowAmt = Math.min(0.95, p / TRAP.fill); } }
+        }
+        z.prog.forEach(function (p, t) { if (!now.has(t)) z.prog.set(t, Math.max(0, p - dt * 1.5)); });
+        if (z.exAt && z.t >= z.exAt) {
+          z.exploded = true; z.exT = z.t; const hit = []; for (const t of inside) if (t.st.frozen > 0) { hit.push(t); g.damage(t, V[5][0], f, 'ice'); t.st.frozen = 0; g.fx('burst', t.x, t.y, { col: '#ffffff', n: 16, life: 0.6 }); }
+          g.fx('ring', z.x, z.y, { r: z.r, col: '#ffffff', life: 0.4, w: 8 }); g.sfx('boom'); g.shake(4);
+        } else if (z.t >= z.life) g.iceZ.splice(i, 1);
+      }
+    }
+  };
+
+  // ---------- dessin ----------
+  function spike(c, x, y, h, w, a) { if (h < 1) return; c.globalAlpha = a; const gr = c.createLinearGradient(x, y, x, y - h); gr.addColorStop(0, '#6fc8ee'); gr.addColorStop(1, '#f2fcff'); c.fillStyle = gr; c.beginPath(); c.moveTo(x - w / 2, y); c.lineTo(x + w * 0.08, y - h); c.lineTo(x + w / 2, y); c.closePath(); c.fill(); c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 1; c.stroke(); c.fillStyle = 'rgba(40,110,160,.25)'; c.beginPath(); c.ellipse(x, y + 1, w * 0.5, 3, 0, 0, PI2); c.fill(); }
+  function flake(c, x, y, r, rot) { c.strokeStyle = 'rgba(235,250,255,.95)'; c.lineWidth = 1.3; for (let k = 0; k < 3; k++) { const a = rot + k * Math.PI / 3; c.beginPath(); c.moveTo(x - Math.cos(a) * r, y - Math.sin(a) * r); c.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); c.stroke(); } }
+  WB.drawIce = function (c, g, time) {
+    if (!g.iceZ) return;
+    for (const z of g.iceZ) {
+      c.save(); const f = z.f;
+      if (z.kind === 'aura' || z.kind === 'seek') {
+        const a = Math.min(1, z.t / 0.2, (z.life - z.t) / 0.5 + 0.0), r = z.r * (0.9 + 0.1 * Math.min(1, z.t / 0.25)); c.globalAlpha = Math.max(0, 0.2 * a); c.fillStyle = '#bfefff'; c.beginPath(); c.arc(f.x, f.y, r, 0, PI2); c.fill();
+        c.globalAlpha = Math.max(0, 0.8 * a); c.strokeStyle = '#d8f6ff'; c.lineWidth = 3; c.setLineDash([12, 8]); c.lineDashOffset = -time * 30; c.beginPath(); c.arc(f.x, f.y, r, 0, PI2); c.stroke(); c.setLineDash([]);
+        for (let k = 0; k < 14; k++) { const an = z.seed + k * 0.9 + time * (0.4 + (k % 3) * 0.15), rr = r * (0.25 + ((k * 0.37 + time * 0.1) % 0.7)); c.globalAlpha = Math.max(0, a * 0.9); flake(c, f.x + Math.cos(an) * rr, f.y + Math.sin(an) * rr, 4 + (k % 3), time + k); }
+        const tr = z.train; if (tr) {   // trajectoire de piques, du personnage à la cible
+          const age = tr.hit ? Math.max(0, 1 - (z.t - (tr.hitT || z.t)) / 0.5) : 1; if (age > 0) { c.globalAlpha = 0.5 * age; c.strokeStyle = '#d8f6ff'; c.lineWidth = 2; c.beginPath(); c.moveTo(f.x, f.y); const p0 = tr.path[0]; c.lineTo(p0.x, p0.y); c.stroke(); c.beginPath(); c.moveTo(p0.x, p0.y); for (const p of tr.path) c.lineTo(p.x, p.y); c.stroke();
+            tr.path.forEach(function (p, k) { const grow = Math.min(1, (z.t - p.t) / 0.15); spike(c, p.x + (k % 2 ? 4 : -4), p.y + 4, (14 + (k % 3) * 5) * grow, 11, age); }); if (!tr.hit) spike(c, tr.x, tr.y + 4, 30, 16, 1); }
+        }
+      } else if (z.kind === 'rings') {
+        z.radii.forEach(function (r, k) {
+          const t0 = 0.15 + 0.4 * k, u = z.t - t0; if (u < 0 || u > 0.9) return; const h = u < 0.2 ? u / 0.2 : u < 0.65 ? 1 : Math.max(0, 1 - (u - 0.65) / 0.25), n = Math.round(PI2 * r / 30);
+          for (let j = 0; j < n; j++) { const an = j * PI2 / n + k * 0.3; spike(c, z.x + Math.cos(an) * r, z.y + Math.sin(an) * r, (26 + (j % 3) * 6) * h, 14, 0.95); }
+        });
+      } else {
+        const exp = z.exploded, a = exp ? Math.max(0, 1 - (z.t - z.exT) / 0.6) : Math.min(1, z.t / 0.4) * Math.min(1, (z.life - z.t) / 0.8 + 0.2);
+        const gr = c.createRadialGradient(z.x, z.y, z.r * 0.2, z.x, z.y, z.r); gr.addColorStop(0, 'rgba(200,240,255,.12)'); gr.addColorStop(0.85, 'rgba(170,225,255,.3)'); gr.addColorStop(1, 'rgba(235,252,255,.65)');
+        c.globalAlpha = a; c.fillStyle = gr; c.beginPath(); c.ellipse(z.x, z.y, z.r, z.r * 0.92, 0, 0, PI2); c.fill();
+        c.strokeStyle = '#eaffff'; c.lineWidth = 3; c.globalAlpha = a * 0.9; c.beginPath(); c.ellipse(z.x, z.y, z.r, z.r * 0.92, 0, 0, PI2); c.stroke();
+        c.globalAlpha = a * 0.35; c.strokeStyle = '#ffffff'; c.lineWidth = 2; c.beginPath(); c.arc(z.x - z.r * 0.35, z.y - z.r * 0.4, z.r * 0.5, 3.6, 4.6); c.stroke();
+        for (let k = 0; k < 22; k++) { const an = z.seed + k * 2.4 + time * 0.35, rr = z.r * (0.12 + ((k * 0.171 + time * 0.07) % 0.82)); c.globalAlpha = a; flake(c, z.x + Math.cos(an) * rr, z.y + Math.sin(an) * rr * 0.9, 4 + (k % 3), time * 0.8 + k); }
+        if (exp) { const u = Math.min(1, (z.t - z.exT) / 0.2); for (let k = 0; k < 40; k++) { const an = k * 2.399, rr = z.r * Math.sqrt((k + 0.5) / 40); spike(c, z.x + Math.cos(an) * rr, z.y + Math.sin(an) * rr * 0.9, 34 * u * (0.7 + (k % 3) * 0.2), 14, a); } }
+      }
+      c.restore();
+    }
+  };
+  const upd = WB.updateHands, drw = WB.drawHands;
+  WB.updateHands = function (dt) { upd(dt); WB.updateIce(dt); };
+  WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawIce(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.ice = ['Myrtilles givrées', 'Gel, piques de glace et piège.', ['Une zone autour de toi gèle le plus proche ennemi qui y entre.', 'La zone gèle tous les ennemis qui y entrent, un peu plus fort.', 'Des piques jaillissent du sol, poursuivent la cible, la transpercent et la gèlent.', 'Cercles de piques en expansion à 360° : dégâts répétés et ralentissement, sans gel.', 'Piège de glace posé où tu veux : ralentit puis gèle, et finit par une explosion de piques.']];

@@ -66,3 +66,16 @@ Nom affiché : Fourche (identifiant interne `scythe` inchangé). Arme : longue f
 | 5 | Très grande fourche avec petite tête de mort | Balayage de 180° devant puis 180° derrière (une seule activation) | Portée 180 px ; poison constant de 4 PV/s par petits paliers, jusqu'à la mort ou un soin (tout gain de PV l'arrête) ; recharge 9 s (5 s aux niveaux 1 à 4) |
 
 Notes : le poison utilise le système de dégâts sur la durée existant (dégressif pour N3-N4, constant pour N5). Correction de bug au passage : les dégâts sur la durée (brûlure, poison) ne s'appliquaient pas aux personnages qui n'avaient jamais eu de bouclier (condition `st.shield <= 0` fausse quand la valeur n'existe pas) ; corrigé dans game.js.
+
+## GLACE (fruit myrtille givrée) — spécification officielle
+Dégâts et gel ajustés pour l'équilibrage. Recharge après 5 utilisations : 7 s (niv.1 à 3), 8 s (niv.4), 10 s (niv.5).
+
+| Niv. | Comportement | Portée | Effets |
+|---|---|---|---|
+| 1 | Zone autour du joueur pendant 3,2 s ; l'ennemi le plus proche qui y entre est gelé. Un seul gelé à la fois (le suivant peut l'être après la fin du gel) | 170 | 20 dégâts, gel 1,4 s |
+| 2 | Même zone : tous les ennemis qui y entrent sont gelés ensemble | 190 | 24 dégâts, gel 1,7 s |
+| 3 | Zone ; quand un ennemi y entre, une trajectoire de piques surgit du sol depuis le joueur et poursuit la cible jusqu'à l'impact (une cible par lancer) | 210 | 34 dégâts + gel 1,7 s à l'impact |
+| 4 | 4 cercles de piques (rayons 70, 130, 190, 250) sortent l'un après l'autre à 360°, s'enfoncent puis laissent place au suivant ; aucune poursuite | 260 | 14 dégâts par cercle touché (jusqu'à 4 fois), ralentissement 55 % pendant 2,2 s, jamais de gel |
+| 5 | Piège posé à l'endroit visé (ou devant le joueur, même sans ennemi) : grande sphère transparente à flocons, rayon 120 px, armée 10 s. L'ennemi qui y entre est ralenti progressivement (jusqu'à 95 %) puis gelé après 1,6 s de présence ; gel de 1,8 s ; juste avant la fin du gel, piques sur toute la surface | 300 (distance de pose) | 60 dégâts aux ennemis gelés, ils sont libérés, la zone disparaît ; un ennemi qui sort à temps n'est pas gelé |
+
+Choix d'équilibrage : un seul gel par ennemi et par zone, pas de gel pendant le niveau 4, explosion du niveau 5 limitée à 60 dégâts (moins du quart des PV d'un joueur de niveau 1), gel limité à 1,8 s, ennemis libres de sortir pendant les 1,6 s de ralentissement.

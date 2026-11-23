@@ -185,7 +185,7 @@
     const list = only != null ? [only] : f.loadout.filter(function (v) { return v != null; }); let fired = 0, noTarget = false;
     for (const i of list) {
       const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
-      const au = G.autoAim(f, ab); if (!au.target && !NOTARGET_OK[ab.id]) { noTarget = true; continue; }
+      const au = G.autoAim(f, ab); if (!au.target && !NOTARGET_OK[ab.id] && !(ab.id === 'ice' && ab.lvl >= 5)) { noTarget = true; continue; }
       if (G.useSlot(f, i, au)) fired++;
     }
     if (!fired && noTarget) U.showToast('Aucun adversaire à portée', '#ffd0a0');
