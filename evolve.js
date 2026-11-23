@@ -90,7 +90,7 @@
     dash: ['Banane', 'Fonce en ligne droite et blesse ce que tu heurtes.', ['Un élan qui blesse ce qu\'il heurte.', 'Dégâts de l\'élan augmentés.', 'Laisse une traînée qui blesse.', 'La traînée ralentit les ennemis.', 'Onde de choc à l\'arrivée qui repousse.']],
     water: ['Pastèque', 'Repousse et réduit au silence : les ennemis ne peuvent plus utiliser de capacités. Dans l\'eau, ils meurent.', ['Un cône d\'eau.', 'Dégâts et silence plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tempête à 360° autour de toi.']],
     wind: ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un cône de vent.', 'Dégâts et étourdissement plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tornade à 360° autour de toi.']],
-    scythe: ['Ananas', 'Frappe en arc devant toi.', ['Un coup de faux.', 'Deux coups de suite.', 'Deux coups, portée augmentée.', 'Trois coups en arc très large.', 'Tourbillon de 4 coups à 360°.']],
+    scythe: ['Ananas', 'Fourche du diable noire et violette.', ['Une fourche balaie 120° devant toi.', 'Deux fourches qui se croisent.', 'Grande fourche : dégâts reçus divisés par 2, poison dégressif.', 'Deux grandes fourches toxiques.', 'Fourche à tête de mort : devant puis derrière, poison constant jusqu\'au soin.']],
     invis: ['Raisin fantôme', 'Tu deviens invisible. Les ennemis que tu touches sont blessés. En équipe, des alliés proches le deviennent aussi.', ['Invisible environ 4,6 s.', 'Invisible plus longtemps, dégâts plus forts.', 'Nuage de fumée : les ennemis proches sont réduits au silence.', 'Esquive de 0,8 s au lancement.', 'Nova d\'ombre : 35 dégâts, silence et recul autour de toi.']],
     spider: ['Aubergine', 'Lance une toile : l\'ennemi est immobilisé, blessé dans la durée, puis ralenti.', ['Une toile.', 'Immobilisation et poison plus longs.', 'Deux toiles.', 'La toile saute sur un deuxième ennemi proche.', 'Trois toiles qui sautent.']],
     clown: ['Orange', 'Des clowns explosifs poursuivent les ennemis.', ['Un clown.', 'Deux clowns, explosion plus grande.', 'Trois clowns, l\'explosion étourdit.', 'Quatre clowns, plus rapides.', 'Cinq clowns, confettis géants.']],
@@ -261,7 +261,7 @@
     let da = Math.atan2(dy, dx) - ang; while (da > Math.PI) da -= PI2; while (da < -Math.PI) da += PI2;
     return Math.abs(da) <= half + Math.atan2(t.r, Math.max(d, 1)) && G().world.los(f.x, f.y, t.x, t.y);
   }
-  function ignite(g, c, t) { const now = c.t, last = c.burnAt.get(t); if (last == null || now - last > 0.7) { c.burnAt.set(t, now); g.burn(t, 10 + 6 * c.L, 3, c.f, 'fire'); g.fx('burst', t.x, t.y, { col: '#ff9a3c', n: 4, life: 0.3 }); } }
+  function ignite(g, c, t) { const now = c.t, last = c.burnAt.get(t); if ((last == null || now - last > 0.7) && !t.dots.some(function (d) { return d.ab === 'fire' && d.left > 0.8; })) { c.burnAt.set(t, now); g.burn(t, 10 + 6 * c.L, 3, c.f, 'fire'); g.fx('burst', t.x, t.y, { col: '#ff9a3c', n: 4, life: 0.3 }); } }
 
   WB.updateFire = function (dt) {
     const g = G(); if (!g) return; state(g);
@@ -304,7 +304,7 @@
     }
     // fumée noire sur tout personnage en train de brûler
     g.smokeT -= dt;
-    if (g.smokeT <= 0) { g.smokeT = 0.07; for (const t of g.F) if (t.alive && t.dots && t.dots.length && g.smoke.length < 140) g.smoke.push({ x: t.x + (Math.random() - 0.5) * 14, y: t.y - 14, vx: (Math.random() - 0.5) * 20, vy: -(40 + Math.random() * 25), t: 0, life: 0.9 + Math.random() * 0.4, r: 6 + Math.random() * 4 }); }
+    if (g.smokeT <= 0) { g.smokeT = 0.07; for (const t of g.F) if (t.alive && t.dots && t.dots.some(function (d) { return d.ab !== 'scythe'; }) && g.smoke.length < 140) g.smoke.push({ x: t.x + (Math.random() - 0.5) * 14, y: t.y - 14, vx: (Math.random() - 0.5) * 20, vy: -(40 + Math.random() * 25), t: 0, life: 0.9 + Math.random() * 0.4, r: 6 + Math.random() * 4 }); }
     for (let i = g.smoke.length - 1; i >= 0; i--) { const s = g.smoke[i]; s.t += dt; s.x += s.vx * dt; s.y += s.vy * dt; if (s.t >= s.life) g.smoke.splice(i, 1); }
   };
 
@@ -486,3 +486,121 @@ WB.GUIDE.fire = ['Piment', 'Boules de feu, rayons, puis lance-flammes. La brûlu
   WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); if (g.whirls) for (const w of g.whirls) drawTornado(ctx, w, time); };
 })(window.WB);
 WB.GUIDE.wind = ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un souffle qui repousse un seul ennemi.', 'Onde à 360° : tous les ennemis dans un rayon deux fois plus grand.', 'Un tourbillon visible qui tourne autour de toi puis s\'éloigne ; il capture 2 ennemis au plus et les projette.', 'Deux tourbillons qui t\'accompagnent ; celui qui capture s\'éloigne avec sa prise.', 'Onde 360°, puis 4 tourbillons : 2 gardes autour de toi, 2 chasseurs qui poursuivent les ennemis.']];
+
+// ===================== FOURCHE DU DIABLE (ancienne Faux) : spécification officielle =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, S = A.scythe, D60 = Math.PI / 3, D90 = Math.PI / 2;
+  const POISON = { 3: [60, 5], 4: [100, 5.5] }, PERM_DPS = 4;   // total/durée (dégressif) pour N3-N4 ; points de vie par seconde (constant) pour N5
+  const norm = function (a) { while (a > Math.PI) a -= PI2; while (a < -Math.PI) a += PI2; return a; };
+
+  // ---------- dessin de l'arme : manche noir, tête à trois dents, lueur violette, tête de mort au niveau 5 ----------
+  WB.drawFork = function (c, x, y, ang, len, sc, time, skull) {
+    c.save(); c.translate(x, y); c.rotate(ang); c.lineCap = 'round'; c.lineJoin = 'round';
+    const hl = 30 * sc, sp = 13 * sc, bx = Math.max(8, len - hl), glow = 0.6 + 0.4 * Math.sin(time * 7);
+    c.shadowColor = '#9b5cff'; c.shadowBlur = 9 + 5 * glow;
+    c.strokeStyle = '#8a4ae0'; c.lineWidth = 5.5 * Math.sqrt(sc) + 2; c.beginPath(); c.moveTo(-8, 0); c.lineTo(bx, 0); c.stroke();
+    c.strokeStyle = '#160a20'; c.lineWidth = 4 * Math.sqrt(sc); c.beginPath(); c.moveTo(-8, 0); c.lineTo(bx, 0); c.stroke();
+    // anneaux violets sur le manche
+    c.strokeStyle = '#b98cff'; c.lineWidth = 1.6; for (let k = 1; k <= 3; k++) { const px = bx * k / 4; c.beginPath(); c.moveTo(px, -3 * sc); c.lineTo(px, 3 * sc); c.stroke(); }
+    // tête : traverse courbe + trois dents
+    const head = function () { c.beginPath(); c.moveTo(bx, -sp); c.quadraticCurveTo(bx + hl * 0.12, -sp * 0.1, bx, 0); c.quadraticCurveTo(bx + hl * 0.12, sp * 0.1, bx, sp); c.moveTo(bx, -sp); c.lineTo(bx + hl, -sp * 0.8); c.moveTo(bx, sp); c.lineTo(bx + hl, sp * 0.8); c.moveTo(bx, 0); c.lineTo(bx + hl * 1.12, 0); };
+    c.strokeStyle = '#8a4ae0'; c.lineWidth = 5 * Math.sqrt(sc) + 2; head(); c.stroke();
+    c.strokeStyle = '#120818'; c.lineWidth = 3.6 * Math.sqrt(sc); head(); c.stroke();
+    c.fillStyle = '#c9a0ff'; for (const o of [[bx + hl, -sp * 0.8], [bx + hl, sp * 0.8], [bx + hl * 1.12, 0]]) { c.beginPath(); c.arc(o[0], o[1], 1.8 * Math.sqrt(sc), 0, PI2); c.fill(); }
+    c.shadowBlur = 0;
+    if (skull) { // petite tête de mort sur la tête de la fourche
+      const sx = bx - 2, r = 8.5 * Math.min(1.5, sc * 0.8); c.rotate(Math.PI / 2); c.fillStyle = '#efe4ff'; c.strokeStyle = '#2a0a40'; c.lineWidth = 1.6;
+      c.beginPath(); c.arc(0 - 0, -sx, r, 0, PI2); c.fill(); c.stroke(); c.fillRect(-r * 0.55, -sx + r * 0.6, r * 1.1, r * 0.9); c.strokeRect(-r * 0.55, -sx + r * 0.6, r * 1.1, r * 0.9);
+      c.fillStyle = '#1a0830'; c.beginPath(); c.ellipse(-r * 0.38, -sx - r * 0.1, r * 0.26, r * 0.32, 0, 0, PI2); c.ellipse(r * 0.38, -sx - r * 0.1, r * 0.26, r * 0.32, 0, 0, PI2); c.fill();
+      c.beginPath(); c.moveTo(0, -sx + r * 0.25); c.lineTo(-r * 0.12, -sx + r * 0.5); c.lineTo(r * 0.12, -sx + r * 0.5); c.closePath(); c.fill();
+      c.strokeStyle = '#2a0a40'; c.lineWidth = 1; for (let k = -1; k <= 1; k++) { c.beginPath(); c.moveTo(k * r * 0.3, -sx + r * 0.75); c.lineTo(k * r * 0.3, -sx + r * 1.4); c.stroke(); }
+    }
+    c.restore();
+  };
+
+  // ---------- déroulement : liste de segments par fourche ----------
+  function plan(L, base) {
+    const T = 0.2, R = 0.2, forks = [];
+    if (L >= 5) {
+      forks.push({ sc: 1.9, skull: true, segs: [
+        { t0: 0, t1: 0.3, a0: base - D90, a1: base + D90, e0: 0.4, e1: 1, hit: true, kdir: base },
+        { t0: 0.36, t1: 0.66, a0: base + D90, a1: base + 3 * D90, e0: 1, e1: 1, hit: true, kdir: base + Math.PI },
+        { t0: 0.66, t1: 0.86, a0: base + 3 * D90, a1: base + 3 * D90, e0: 1, e1: 0.2, hit: false }] });
+    } else {
+      const big = L >= 3, two = L === 2 || L === 4, sc = big ? 1.55 : 1;
+      const mk = function (dir) { const a0 = base - dir * D60, a1 = base + dir * D60; return { sc: sc, skull: false, segs: [{ t0: 0, t1: T, a0: a0, a1: a1, e0: 0.35, e1: 1, hit: true, kdir: base }, { t0: T, t1: T + R, a0: a1, a1: base, e0: 1, e1: 0.2, hit: false }] }; };
+      forks.push(mk(1)); if (two) forks.push(mk(-1));
+    }
+    return forks;
+  }
+  function pose(fk, t) {
+    const segs = fk.segs, first = segs[0], last = segs[segs.length - 1]; if (t < first.t0 || t > last.t1) return null;
+    for (const s of segs) if (t >= s.t0 && t <= s.t1) { const u = s.t1 > s.t0 ? (t - s.t0) / (s.t1 - s.t0) : 1; return { ang: s.a0 + (s.a1 - s.a0) * u, ext: s.e0 + (s.e1 - s.e0) * Math.min(1, s === first && s.e0 < 1 && segs.length === 2 ? u * 3.5 : u), seg: s }; }
+    for (let i = 1; i < segs.length; i++) if (t > segs[i - 1].t1 && t < segs[i].t0) return { ang: segs[i - 1].a1, ext: segs[i - 1].e1, seg: null };
+    return null;
+  }
+
+  S.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x); g.forks = g.forks || []; g.forkP = g.forkP || [];
+    if (g.forks.some(function (a) { return a.f === f; })) return false;       // une seule attaque à la fois : pas de charge perdue
+    const R = S.range(L); f.aimLast = { x: aim.x, y: aim.y };
+    g.forks.push({ f: f, L: L, base: base, R: R, t: 0, forks: plan(L, base), dmg: 24 + 5 * L, poisoned: new Set(), done: false });
+    g.sfx('swing'); if (f === g.player) g.shake(L >= 5 ? 4 : 2);
+  };
+
+  function applyPoison(g, a, t) {
+    const f = a.f; if (a.poisoned.has(t)) return; a.poisoned.add(t);
+    if (a.L === 3 || a.L === 4) g.burn(t, POISON[a.L][0], POISON[a.L][1], f, 'scythe');
+    else if (a.L >= 5 && !t.dots.some(function (d) { return d.perm; })) {
+      const dur = 100000; g.dotFlat(t, PERM_DPS * dur, dur, f, 'scythe'); t.dots[t.dots.length - 1].perm = true; t.dots[t.dots.length - 1].poisonSrc = f;
+    }
+    if (a.L >= 3) g.fx('burst', t.x, t.y, { col: '#9b5cff', n: 12, life: 0.6 });
+  }
+
+  WB.updateForks = function (dt) {
+    const g = G(); if (!g) return; g.forks = g.forks || []; g.forkP = g.forkP || [];
+    // protection du niveau 3 : la grande fourche divise par deux les dégâts reçus ; soin = fin du poison permanent
+    if (!g.__forkHooks) {
+      g.__forkHooks = 1; const od = g.damage, oh = g.heal;
+      g.damage = function (t, amt) { if (t && t.slots && t.slots.some(function (s) { return s && s.id === 'scythe' && s.lvl === 3; })) { const a = Array.prototype.slice.call(arguments); a[1] = amt * 0.5; return od.apply(g, a); } return od.apply(g, arguments); };
+      g.heal = function (f, amt) { oh.apply(g, arguments); if (amt > 0 && f.dots) f.dots = f.dots.filter(function (d) { return !d.perm; }); };
+    }
+    for (const f of g.F) {   // gain de vie par une autre source : le poison permanent s'arrête aussi
+      if (f.dots && f.dots.length) { if (f._hp0 != null && f.hp > f._hp0 + 0.5 && f.dots.some(function (d) { return d.perm; })) f.dots = f.dots.filter(function (d) { return !d.perm; }); }
+      f._hp0 = f.hp;
+      if (f.alive && f.dots && f.dots.some(function (d) { return d.ab === 'scythe'; }) && Math.random() < dt * 14 && g.forkP.length < 200) g.forkP.push({ x: f.x + (Math.random() - 0.5) * 22, y: f.y + 8, vx: (Math.random() - 0.5) * 24, vy: -(25 + Math.random() * 35), t: 0, life: 0.8 + Math.random() * 0.5, r: 2 + Math.random() * 3, soul: 1 });
+    }
+    for (let i = g.forks.length - 1; i >= 0; i--) {
+      const a = g.forks[i], f = a.f; a.t += dt;
+      if (!f.alive || f.st.frozen > 0 || f.swallowed) { g.forks.splice(i, 1); continue; }
+      let anyLive = false;
+      for (const fk of a.forks) {
+        const ps = pose(fk, a.t); fk.cur = ps; if (!ps) { if (a.t < fk.segs[fk.segs.length - 1].t1) anyLive = true; continue; } anyLive = true;
+        const reach = a.R * ps.ext;
+        if (g.forkP.length < 200) for (let k = 0; k < 2; k++) { const d = reach * (0.5 + Math.random() * 0.5); g.forkP.push({ x: f.x + Math.cos(ps.ang) * d, y: f.y + Math.sin(ps.ang) * d, vx: (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 30 - 10, t: 0, life: 0.35 + Math.random() * 0.3, r: 2.5 + Math.random() * 3 }); }
+        if (!ps.seg || !ps.seg.hit) continue;
+        fk.hit = fk.hit || new Map(); const hs = fk.hit.get(ps.seg) || new Set(); fk.hit.set(ps.seg, hs);
+        for (const t of g.F) {
+          if (!t.alive || t.team === f.team || t.st.jump || t.ghost || hs.has(t)) continue;
+          const d = Math.hypot(t.x - f.x, t.y - f.y); if (d > reach + t.r) continue;
+          const rel = norm(Math.atan2(t.y - f.y, t.x - f.x) - ps.seg.a0), cov = ps.ang - ps.seg.a0, up = ps.seg.a1 >= ps.seg.a0;
+          const inside = up ? (rel >= -0.14 && rel <= cov + 0.14) : (rel <= 0.14 && rel >= cov - 0.14); if (!inside && d > 36) continue;
+          hs.add(t); g.damage(t, a.dmg, f, 'scythe'); g.knock(t, Math.cos(ps.seg.kdir), Math.sin(ps.seg.kdir), 200); applyPoison(g, a, t);
+        }
+        for (const s of (g.spiders || [])) if (s.alive && Math.hypot(s.x - f.x, s.y - f.y) < reach && !(fk.sp && fk.sp.has(s))) { fk.sp = fk.sp || new Set(); fk.sp.add(s); g.hitSpider(s, a.dmg, f); }
+      }
+      if (!anyLive) g.forks.splice(i, 1);
+    }
+    for (let i = g.forkP.length - 1; i >= 0; i--) { const p = g.forkP[i]; p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; if (p.t >= p.life) g.forkP.splice(i, 1); }
+  };
+
+  const upd = WB.updateHands, drw = WB.drawHands;
+  WB.updateHands = function (dt) { upd(dt); WB.updateForks(dt); };
+  WB.drawHands = function (ctx, g, time) {
+    drw(ctx, g, time);
+    if (g.forkP) for (const p of g.forkP) { const u = p.t / p.life; ctx.globalAlpha = Math.max(0, 0.8 * (1 - u)); ctx.fillStyle = p.soul ? (u < 0.5 ? '#c9a0ff' : '#5a2a90') : (u < 0.5 ? '#9b5cff' : '#2a0a40'); ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 + u * 0.6), 0, PI2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+    if (g.forks) for (const a of g.forks) for (const fk of a.forks) if (fk.cur) { const ps = fk.cur, len = a.R * ps.ext; WB.drawFork(ctx, a.f.x, a.f.y - 4, ps.ang, len, fk.sc, time, fk.skull); }
+  };
+})(window.WB);

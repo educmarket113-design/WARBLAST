@@ -167,14 +167,14 @@
   cone('wind', 'Vent', '#d6f4ee', 'Repousse et étourdit les ennemis. Ils gardent leurs capacités.', false, L => 14 + 4 * L, 700, L => 1 + 0.15 * L);
 
   def('scythe', {
-    name: 'Faux de la mort', col: '#dfe6f2', type: 'aim', cd: L => 5, range: L => 120,
-    desc: 'Coups de faux : 1 au niveau 1, 2 au niveau 2, 3 au niveau 4, un tourbillon de 4 coups sur 360° au niveau 5.',
+    name: 'Fourche', col: '#9b5cff', type: 'aim', cd: L => (L >= 5 ? 9 : 5), range: L => (L >= 5 ? 180 : 200),
+    desc: 'Fourche du diable : une fourche, deux fourches croisées, grande fourche protectrice et toxique, deux grandes fourches, fourche à tête de mort.',
     cast(f, ab, aim) {
       const g = G(), L = ab.lvl, base = Math.atan2(aim.y, aim.x), R = L >= 5 ? 160 : 100 + 10 * L, half = L >= 5 ? Math.PI : L >= 4 ? 1.6 : 1.0, swings = [1, 2, 2, 3, 4][L - 1];
       const swing = (side) => { if (!f.alive) return; g.arcHit(f, f.x, f.y, R, base, half, 24 + 5 * L, 'scythe'); g.fx('arc', f.x, f.y, { ang: base, r: R, half: half, side: side, life: 0.28, col: '#e8f0ff' }); g.sfx('swing'); };
       for (let k = 0; k < swings; k++) { if (k === 0) swing(1); else g.later(0.38 * k, () => swing(k % 2 ? -1 : 1)); }
     },
-    ai: { max: L => 120, min: 0 }
+    ai: { max: L => 190, min: 0 }
   });
 
   def('invis', {

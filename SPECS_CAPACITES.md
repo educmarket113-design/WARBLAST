@@ -53,3 +53,16 @@ Capture : le personnage est étourdi (aucune action), soulevé et entraîné 0,9
 
 ## RAYON D'ACTION (toutes capacités)
 Un cercle à la portée de chaque capacité prête placée dans l'analogue est dessiné autour du joueur ; il s'intensifie quand un ennemi y entre. Il est dessiné uniquement pour le joueur local, jamais pour les autres.
+
+## FOURCHE (ancienne « Faux », fruit ananas) — spécification officielle
+Nom affiché : Fourche (identifiant interne `scythe` inchangé). Arme : longue fourche du diable noire à lueur violette, trois dents, anneaux violets, particules violettes ; toujours dessinée pendant l'attaque. Dégâts directs 24 + 5 x niveau (valeurs d'origine). 5 utilisations puis recharge. Une seule attaque de fourche à la fois (pas de charge perdue).
+
+| Niv. | Arme | Mouvement | Effets |
+|---|---|---|---|
+| 1 | Une fourche | S'allonge brusquement et balaie 120° devant, puis revient | Portée 200 px (110 avant) |
+| 2 | Deux fourches | Partent de deux côtés opposés et se croisent devant en 0,2 s, frappent simultanément | Portée 200, 2 coups par ennemi |
+| 3 | Une grande fourche (x1,55) | Même balayage 120°, portée 200 | Poison dégressif (60 sur 5 s, fort au début) ; dégâts reçus divisés par 2 tant que le niveau 3 est équipé |
+| 4 | Deux grandes fourches | Se croisent comme au niveau 2 | Poison dégressif plus fort (100 sur 5,5 s), 2 coups par ennemi |
+| 5 | Très grande fourche avec petite tête de mort | Balayage de 180° devant puis 180° derrière (une seule activation) | Portée 180 px ; poison constant de 4 PV/s par petits paliers, jusqu'à la mort ou un soin (tout gain de PV l'arrête) ; recharge 9 s (5 s aux niveaux 1 à 4) |
+
+Notes : le poison utilise le système de dégâts sur la durée existant (dégressif pour N3-N4, constant pour N5). Correction de bug au passage : les dégâts sur la durée (brûlure, poison) ne s'appliquaient pas aux personnages qui n'avaient jamais eu de bouclier (condition `st.shield <= 0` fausse quand la valeur n'existe pas) ; corrigé dans game.js.

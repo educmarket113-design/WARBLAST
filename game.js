@@ -123,7 +123,7 @@
       for (let i = f.dots.length - 1; i >= 0; i--) {
         const d = f.dots[i]; d.left -= dt;
         const dps = d.type === 'taper' ? 2 * d.total / d.dur * Math.max(0, d.left) / d.dur : d.total / d.dur;
-        d.acc += dps * dt; if (d.acc >= 2 && f.st.shield <= 0) { G.damage(f, d.acc, d.src, d.ab, { dot: true, noRedirect: true }); d.acc = 0; if (!f.alive) return; }
+        d.acc += dps * dt; if (d.acc >= 2 && !(f.st.shield > 0)) { G.damage(f, d.acc, d.src, d.ab, { dot: true, noRedirect: true }); d.acc = 0; if (!f.alive) return; }
         if (d.left <= 0) f.dots.splice(i, 1);
       }
     }
@@ -792,7 +792,7 @@
     }
     if (st.root > 0) { ctx.save(); ctx.translate(f.x, f.y); ctx.strokeStyle = 'rgba(245,245,255,.9)'; ctx.lineWidth = 1.6; for (let a = 0; a < 6; a++) { const an = a * Math.PI / 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(an) * 30, Math.sin(an) * 26); ctx.stroke(); } for (const r of [12, 22]) { ctx.beginPath(); for (let a = 0; a <= 6; a++) { const an = a * Math.PI / 3; ctx.lineTo(Math.cos(an) * r, Math.sin(an) * r * 0.9); } ctx.stroke(); } ctx.restore(); }
     if (st.shield > 0) { ctx.save(); ctx.translate(f.x, f.y); const g = ctx.createRadialGradient(0, 0, 10, 0, 0, 38); g.addColorStop(0, 'rgba(120,200,255,.05)'); g.addColorStop(1, 'rgba(150,220,255,.6)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 38, 0, PI2); ctx.fill(); ctx.strokeStyle = '#bfe8ff'; ctx.lineWidth = 2.5; ctx.stroke(); ctx.restore(); }
-    if (f.dots.length) { for (let i = 0; i < 2; i++) { const a = time * 9 + i * 3; ctx.fillStyle = i ? '#ffd24a' : '#ff7a1c'; ctx.beginPath(); ctx.ellipse(f.x + Math.sin(a) * 10, f.y - 18 - ((time * 40 + i * 14) % 22), 4, 6, 0, 0, PI2); ctx.fill(); } }
+    if (f.dots.some(function (d) { return d.ab !== 'scythe'; })) { for (let i = 0; i < 2; i++) { const a = time * 9 + i * 3; ctx.fillStyle = i ? '#ffd24a' : '#ff7a1c'; ctx.beginPath(); ctx.ellipse(f.x + Math.sin(a) * 10, f.y - 18 - ((time * 40 + i * 14) % 22), 4, 6, 0, 0, PI2); ctx.fill(); } }
     if (st.stun > 0) { for (let i = 0; i < 3; i++) { const a = time * 5 + i * 2.1; ctx.fillStyle = '#ffe27a'; ctx.beginPath(); ctx.arc(f.x + Math.cos(a) * 16, f.y - R - 6 + Math.sin(a) * 4, 3.5, 0, PI2); ctx.fill(); } }
     if (st.silence > 0) { ctx.save(); ctx.translate(f.x, f.y - R - 14); ctx.strokeStyle = '#ffe94a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(0, 0); ctx.lineTo(-3, 0); ctx.lineTo(4, 6); ctx.stroke(); ctx.restore(); }
     if (f.necro) { ctx.strokeStyle = 'rgba(110,230,170,.8)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]); ctx.beginPath(); ctx.arc(f.x, f.y, 30, 0, PI2); ctx.stroke(); ctx.setLineDash([]); }

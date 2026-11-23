@@ -152,9 +152,9 @@
   };
   WB.drawHeld = function (c, ab, hx, hy, dir, time, swing) {
     const id = ab.id, col = A()[id].col; c.save(); c.translate(hx, hy); c.scale(dir, 1); c.lineCap = 'round'; c.lineJoin = 'round';
-    if (id === 'scythe') { // petite faux
-      c.rotate(-0.5 + (swing || 0)); c.strokeStyle = '#5a3a1a'; c.lineWidth = 3; c.beginPath(); c.moveTo(-2, 12); c.lineTo(3, -18); c.stroke();
-      c.fillStyle = '#d8dcec'; c.strokeStyle = '#2a2a3a'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(3, -18); c.quadraticCurveTo(20, -24, 24, -6); c.quadraticCurveTo(14, -16, 3, -13); c.closePath(); c.fill(); c.stroke();
+    if (id === 'scythe') { // fourche du diable
+      const L = ab.lvl, sc = L >= 5 ? 1.5 : L >= 3 ? 1.25 : 0.95, two = L === 2 || L === 4;
+      for (let k = 0; k < (two ? 2 : 1); k++) { c.save(); c.rotate(two ? (k ? 0.55 : -0.55) : -0.3); WB.drawFork(c, 0, 0, -Math.PI / 2, 40 * sc, sc, time, L >= 5); c.restore(); }
     } else if (id === 'necro') { // petite lance
       c.rotate(-0.9); c.strokeStyle = '#4a3a2a'; c.lineWidth = 3; c.beginPath(); c.moveTo(-6, 12); c.lineTo(0, -16); c.stroke();
       c.shadowColor = col; c.shadowBlur = 8; c.fillStyle = '#9af0c8'; c.strokeStyle = '#1a4a30'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(0, -16); c.lineTo(5, -10); c.lineTo(0, -28); c.lineTo(-5, -10); c.closePath(); c.fill(); c.stroke(); c.shadowBlur = 0;
@@ -177,7 +177,7 @@
     dash: { cols: ['#ffe27a', '#ffffff', '#ffc040'], rate: 26, mk(p, f) { const sp = Math.hypot(f.vx, f.vy) || 1; p.vx = -f.vx / sp * 90; p.vy = -f.vy / sp * 90; p.r = rnd(8, 15); p.life = rnd(0.2, 0.34); p.shape = 'streak'; p.ang = Math.atan2(f.vy, f.vx); } },
     water: { cols: ['#8fd0ff', '#4aa8f0', '#d8f0ff'], rate: 20, mk(p) { p.vx = rnd(-26, 26); p.vy = rnd(-60, -10); p.r = rnd(2.5, 4.5); p.life = rnd(0.5, 0.8); p.g = 360; p.shape = 'drop'; } },
     wind: { cols: ['#ffffff', '#e0f0ff'], rate: 16, mk(p, f) { p.vx = rnd(-40, 40); p.vy = rnd(-20, 20); p.r = rnd(8, 14); p.life = rnd(0.35, 0.6); p.shape = 'swirl'; p.ang = rnd(0, PI2); } },
-    scythe: { cols: ['#c8c8dc', '#6a6a88', '#9a9ab8'], rate: 12, mk(p) { p.vx = rnd(-12, 12); p.vy = rnd(-34, -14); p.r = rnd(5, 9); p.life = rnd(0.7, 1.1); p.alpha = 0.35; } },
+    scythe: { cols: ['#9b5cff', '#3a1060', '#c9a0ff'], rate: 12, mk(p) { p.vx = rnd(-12, 12); p.vy = rnd(-34, -14); p.r = rnd(5, 9); p.life = rnd(0.7, 1.1); p.alpha = 0.35; } },
     invis: { cols: ['#e8f0ff', '#b8c8ff'], rate: 12, mk(p) { p.vx = rnd(-10, 10); p.vy = rnd(-30, -10); p.r = rnd(4, 8); p.life = rnd(0.6, 1); p.alpha = 0.3; } },
     spider: { cols: ['#1a1a24', '#444458'], rate: 8, mk(p, f) { p.x = f.x + rnd(-18, 18); p.y = f.y - 24; p.vx = 0; p.vy = rnd(20, 40); p.r = rnd(2.4, 3.4); p.life = rnd(0.5, 0.8); p.shape = 'thread'; } },
     clown: { cols: ['#ff5a6a', '#ffd24a', '#5ac8ff', '#7aff7a', '#d28aff'], rate: 22, mk(p) { p.vx = rnd(-50, 50); p.vy = rnd(-90, -30); p.r = rnd(2.5, 4); p.life = rnd(0.6, 0.95); p.g = 260; p.shape = 'conf'; p.spin = true; } },

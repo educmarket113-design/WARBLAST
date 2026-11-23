@@ -248,8 +248,9 @@
         c.beginPath(); c.moveTo(-0.9, 0); c.lineTo(0.6, 0); c.arc(0.6, -0.27, 0.27, Math.PI / 2, -Math.PI, true); c.stroke();
         c.beginPath(); c.moveTo(-0.9, 0.45); c.lineTo(0.2, 0.45); c.arc(0.2, 0.7, 0.25, -Math.PI / 2, Math.PI * 0.9, false); c.stroke(); break;
       case 'scythe':
-        c.strokeStyle = '#7a5230'; c.lineWidth = lw * 1.1; c.beginPath(); c.moveTo(-0.5, 0.95); c.lineTo(0.35, -0.8); c.stroke();
-        c.beginPath(); c.moveTo(0.3, -0.85); c.quadraticCurveTo(0.95, -0.85, 0.85, -0.1); c.quadraticCurveTo(0.7, -0.5, 0.2, -0.6); c.closePath(); c.fillStyle = '#dfe6f2'; c.fill(); c.lineWidth = lw * 0.6; c.strokeStyle = '#59606e'; c.stroke(); break;
+        c.strokeStyle = '#2a1238'; c.lineWidth = lw * 1.2; c.beginPath(); c.moveTo(0, 0.98); c.lineTo(0, -0.25); c.stroke();
+        c.strokeStyle = '#2a1238'; c.lineWidth = lw * 1.1; c.beginPath(); c.moveTo(-0.55, -0.9); c.lineTo(-0.55, -0.45); c.quadraticCurveTo(0, 0.1, 0.55, -0.45); c.lineTo(0.55, -0.9); c.moveTo(0, -1); c.lineTo(0, -0.2); c.stroke();
+        c.strokeStyle = '#a66cff'; c.lineWidth = lw * 0.5; c.beginPath(); c.moveTo(-0.55, -0.9); c.lineTo(-0.55, -0.45); c.quadraticCurveTo(0, 0.1, 0.55, -0.45); c.lineTo(0.55, -0.9); c.moveTo(0, -1); c.lineTo(0, -0.2); c.stroke(); break;
       case 'ghost': case 'invis':
         c.beginPath(); c.moveTo(-0.65, 0.85); c.lineTo(-0.65, -0.1); c.quadraticCurveTo(-0.65, -0.9, 0, -0.9); c.quadraticCurveTo(0.65, -0.9, 0.65, -0.1); c.lineTo(0.65, 0.85); c.lineTo(0.3, 0.55); c.lineTo(0, 0.85); c.lineTo(-0.3, 0.55); c.closePath();
         c.fillStyle = 'rgba(235,240,255,.85)'; c.fill(); c.lineWidth = lw * 0.6; c.strokeStyle = '#8a93c0'; c.setLineDash([0.15, 0.1]); c.stroke(); c.setLineDash([]);
