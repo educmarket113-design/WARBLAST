@@ -112,3 +112,116 @@
   A.water.desc = 'Repousse et réduit au silence. Niv.3 : 2 vagues. Niv.4 : cône large, 3 vagues. Niv.5 : tempête à 360°.';
   A.wind.desc = 'Repousse et étourdit. Niv.3 : 2 vagues. Niv.4 : cône large, 3 vagues. Niv.5 : tornade à 360°.';
 })(window.WB);
+
+// ===================== EAU : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2;
+  const W = A.water;
+  const R4 = 340, R5 = 260;
+  W.type = 'aim'; W.col = '#3fa4ff';
+  W.range = function (L) { return L >= 5 ? R5 : L >= 4 ? R4 : 300; };
+  W.desc = 'Niv.1 : une vague. Niv.2 : deux vagues successives. Niv.3 : trois vagues. Niv.4 : une main d\'eau sort du sol, attrape un adversaire et le projette. Niv.5 : plusieurs mains d\'eau dans un rayon autour de toi.';
+  W.ai = { max: function (L) { return L >= 5 ? R5 : L >= 4 ? R4 : 300; }, min: 0 };
+
+  // ---- niveaux 1 à 3 : vagues successives (la suivante part quand la précédente a fini) ----
+  const WAVE_T = 0.45, GAP = 0.06;
+  function sendWave(f, dir, k, L, total) {
+    const g = G(); if (!f.alive) return;
+    const D = 290 + 45 * k, w = 42 + 9 * k, dmg = 14 + 3 * L, force = (520 + 130 * k) * (k === total - 1 && total > 1 ? 1.25 : 1);
+    const x0 = f.x, y0 = f.y, hit = new Set(), ang = Math.atan2(dir.y, dir.x); let blocked = false;
+    g.fx('tide', x0, y0, { ang: ang, D: D, T: WAVE_T, w: w, k: k, life: WAVE_T + 0.3, col: '#3fa4ff' }); g.sfx('water');
+    const STEPS = 12;
+    for (let s = 1; s <= STEPS; s++) g.later(WAVE_T * s / STEPS, function () {
+      if (blocked) return; const e = 1 - (1 - s / STEPS) * (1 - s / STEPS), d = D * e, px = x0 + dir.x * d, py = y0 + dir.y * d;
+      if (g.world.solidAt(px, py)) { blocked = true; g.fx('burst', px - dir.x * 10, py - dir.y * 10, { col: '#bfe9ff', n: 10, life: 0.4 }); return; }
+      for (const t of g.enemiesIn(f, px, py, w)) { if (hit.has(t)) continue; hit.add(t); g.damage(t, dmg, f, 'water'); g.knock(t, dir.x, dir.y, force); g.fx('burst', t.x, t.y, { col: '#bfe9ff', n: 8, life: 0.4 }); }
+    });
+  }
+
+  // ---- niveaux 4 et 5 : mains d'eau ----
+  const HAND = { grab: 0.32, lift: 0.78, release: 0.95, life: 1.5 };
+  function summonHand(f, v, L) {
+    const g = G(), h = { owner: f, v: v, x: v.x, y: v.y, t: 0, L: L, grabbed: false, thrown: false, dmg: L >= 5 ? 55 : 80, lift: 0 };
+    g.hands.push(h); g.sfx('water'); g.fx('ring', v.x, v.y + 14, { r: 46, col: '#9ad8ff', life: 0.35, w: 4 }); return h;
+  }
+  WB.updateHands = function (dt) {
+    const g = G(); if (!g) return;
+    for (let i = g.hands.length - 1; i >= 0; i--) {
+      const h = g.hands[i], v = h.v, f = h.owner; h.t += dt;
+      if (!h.grabbed && h.t < HAND.grab) { if (v.alive) { h.x = v.x; h.y = v.y; } }
+      if (!h.grabbed && h.t >= HAND.grab) { h.grabbed = true; if (v.alive && !(v.st.jump || v.ghost)) { h.got = true; g.status(v, 'stun', 1.1); v.vx = v.vy = 0; v.kx = v.ky = 0; g.fx('burst', h.x, h.y, { col: '#bfe9ff', n: 14, life: 0.5 }); g.shake(3); } }
+      if (h.got && v.alive && !h.thrown) {
+        v.x = h.x; v.y = h.y; v.vx = v.vy = 0;
+        const u = Math.min(1, Math.max(0, (h.t - HAND.grab) / (HAND.lift - HAND.grab))); h.lift = 58 * (1 - (1 - u) * (1 - u)); v.jumpH = h.lift;
+        if (h.t >= HAND.lift) {
+          h.thrown = true; v.jumpH = 0; h.lift = 0;
+          let dx = v.x - f.x, dy = v.y - f.y, d = Math.hypot(dx, dy); if (d < 8) { const a = Math.random() * PI2; dx = Math.cos(a); dy = Math.sin(a); d = 1; }
+          g.damage(v, h.dmg, f, 'water'); g.knock(v, dx / d, dy / d, 2600); g.fx('ring', h.x, h.y, { r: 90, col: '#bfe9ff', life: 0.45, w: 8 }); g.fx('burst', h.x, h.y, { col: '#9ad8ff', n: 22, life: 0.6 }); g.shake(5); g.sfx('boom');
+        }
+      }
+      if ((!v.alive || h.thrown) && v.jumpH && !v.st.jump) v.jumpH = 0;
+      if (h.t >= HAND.life) { if (v.jumpH && !v.st.jump) v.jumpH = 0; g.hands.splice(i, 1); }
+    }
+  };
+
+  W.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl;
+    if (L <= 3) { const n = L; const d = Math.hypot(aim.x, aim.y) || 1, dir = { x: aim.x / d, y: aim.y / d }; for (let k = 0; k < n; k++) g.later(k * (WAVE_T + GAP), function () { sendWave(f, k === 0 ? dir : dir, k, L, n); }); return; }
+    if (L === 4) {
+      const cand = g.enemiesIn(f, f.x, f.y, R4).filter(function (t) { return g.visibleTo ? g.visibleTo(f, t) : true; }); if (!cand.length) return false;
+      const d0 = Math.hypot(aim.x, aim.y) || 1, ux = aim.x / d0, uy = aim.y / d0; let best = null, bs = 1e9;
+      for (const t of cand) { const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) || 1, cos = (dx * ux + dy * uy) / d, score = d + (cos < 0.5 ? 600 : (1 - cos) * 300); if (score < bs) { bs = score; best = t; } }
+      summonHand(f, best, L); return;
+    }
+    const cand = g.enemiesIn(f, f.x, f.y, R5).sort(function (a, b) { return Math.hypot(a.x - f.x, a.y - f.y) - Math.hypot(b.x - f.x, b.y - f.y); }).slice(0, 10);
+    if (!cand.length) return false; cand.forEach(function (t) { summonHand(f, t, L); }); g.shake(3);
+  };
+
+  // ---- dessin de la vague ----
+  WB.drawTide = function (ctx, e, time) {
+    const s = Math.min(1, e.t / e.T), ease = 1 - (1 - s) * (1 - s), d = e.D * ease, a = e.t < e.T ? 1 : Math.max(0, 1 - (e.t - e.T) / 0.3), w = e.w;
+    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang); ctx.globalAlpha = a;
+    const back = Math.max(0, d - 130), grd = ctx.createLinearGradient(back, 0, d + 30, 0); grd.addColorStop(0, 'rgba(63,164,255,0)'); grd.addColorStop(0.55, 'rgba(63,164,255,.55)'); grd.addColorStop(1, 'rgba(150,215,255,.95)');
+    ctx.fillStyle = grd; ctx.beginPath(); ctx.moveTo(back, -w * 0.55); ctx.quadraticCurveTo(d - 20, -w * 1.05, d + 22, 0); ctx.quadraticCurveTo(d - 20, w * 1.05, back, w * 0.55); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(240,252,255,.95)'; ctx.lineWidth = 6; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(d - 26, -w * 0.95); ctx.quadraticCurveTo(d + 16, -w * 0.45, d + 22, 0); ctx.quadraticCurveTo(d + 16, w * 0.45, d - 26, w * 0.95); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 3; for (let i = 1; i <= 3; i++) { const o = i * 26; ctx.globalAlpha = a * (0.55 - i * 0.12); ctx.beginPath(); ctx.moveTo(d - o - 6, -w * (0.75 - i * 0.1)); ctx.quadraticCurveTo(d - o + 10, 0, d - o - 6, w * (0.75 - i * 0.1)); ctx.stroke(); }
+    ctx.globalAlpha = a; ctx.fillStyle = '#eaf9ff'; for (let i = 0; i < 9; i++) { const q = (i * 0.618 + e.k * 0.3) % 1, bx = d - 8 - q * 90, by = Math.sin(i * 2.3 + time * 9) * w * 0.8 * (0.4 + 0.6 * q); ctx.beginPath(); ctx.arc(bx, by, 2 + (i % 3), 0, PI2); ctx.fill(); }
+    ctx.restore();
+  };
+
+  // ---- dessin de la main d'eau ----
+  function finger(ctx, bx, by, ang, len, wd) { const ex = bx + Math.sin(ang) * len, ey = by - Math.cos(ang) * len; ctx.lineWidth = wd; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ex, ey); ctx.stroke(); }
+  WB.drawHands = function (ctx, G, time) {
+    for (const h of G.hands) {
+      const t = h.t, rise = t < HAND.grab ? Math.min(1, t / (HAND.grab * 0.8)) : 1, grip = t < HAND.grab ? 0 : t < HAND.grab + 0.14 ? (t - HAND.grab) / 0.14 : t < HAND.lift ? 1 : Math.max(0, 1 - (t - HAND.lift) / 0.16);
+      const fade = t < HAND.release ? 1 : Math.max(0, 1 - (t - HAND.release) / (HAND.life - HAND.release)), sink = t < HAND.release ? 0 : (t - HAND.release) / (HAND.life - HAND.release);
+      const bx = h.x, by = h.y + 22;                 // sol sous l'adversaire
+      const H = 74 * (h.got && h.grabbed ? 1 : rise) + h.lift * 0.9 - sink * 60, px = bx, py = by - Math.max(6, H);
+      ctx.save(); ctx.globalAlpha = 0.9 * fade;
+      // flaque et ondes au sol
+      ctx.strokeStyle = 'rgba(190,235,255,.85)'; ctx.lineWidth = 3; for (let k = 0; k < 2; k++) { const r = 22 + ((time * 40 + k * 22) % 44) * (rise > 0.1 ? 1 : 0.3); ctx.globalAlpha = (0.9 - r / 80) * fade; ctx.beginPath(); ctx.ellipse(bx, by, r, r * 0.42, 0, 0, PI2); ctx.stroke(); }
+      ctx.globalAlpha = 0.85 * fade; ctx.fillStyle = 'rgba(63,164,255,.55)'; ctx.beginPath(); ctx.ellipse(bx, by, 26, 10, 0, 0, PI2); ctx.fill();
+      // bras d'eau
+      const gr = ctx.createLinearGradient(bx - 14, 0, bx + 14, 0); gr.addColorStop(0, '#2c7fe0'); gr.addColorStop(0.5, '#8fd3ff'); gr.addColorStop(1, '#2c7fe0');
+      ctx.fillStyle = gr; ctx.beginPath(); ctx.moveTo(bx - 17, by); ctx.quadraticCurveTo(bx - 12 + Math.sin(time * 6) * 2, (by + py) / 2, px - 12, py + 4); ctx.lineTo(px + 12, py + 4); ctx.quadraticCurveTo(bx + 12 + Math.sin(time * 6 + 1) * 2, (by + py) / 2, bx + 17, by); ctx.closePath(); ctx.fill();
+      // paume
+      const pg = ctx.createRadialGradient(px - 6, py - 8, 3, px, py, 30); pg.addColorStop(0, '#d8f2ff'); pg.addColorStop(0.6, '#6cbcff'); pg.addColorStop(1, '#2c7fe0');
+      ctx.fillStyle = pg; ctx.beginPath(); ctx.ellipse(px, py, 27, 23, 0, 0, PI2); ctx.fill();
+      // doigts : écartés au début, qui se referment sur l'adversaire
+      const open = 1 - grip, base = [-0.62, -0.22, 0.2, 0.6], lens = [30, 38, 38, 30];
+      ctx.lineCap = 'round'; ctx.strokeStyle = '#7ec8ff';
+      for (let i = 0; i < 4; i++) { const ang = base[i] * (0.25 + 0.75 * open) , len = lens[i] * (1 - 0.38 * grip), fx0 = px + (i - 1.5) * 12, fy0 = py - 12; finger(ctx, fx0, fy0, ang, len, 13); }
+      // pouce
+      finger(ctx, px - 22, py + 2, -1.05 + 0.7 * grip, 24 * (1 - 0.25 * grip), 12); 
+      // reflets
+      ctx.strokeStyle = 'rgba(255,255,255,.65)'; for (let i = 0; i < 4; i++) { const ang = base[i] * (0.25 + 0.75 * open), len = lens[i] * (1 - 0.38 * grip), fx0 = px + (i - 1.5) * 12 - 3, fy0 = py - 14; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(fx0, fy0); ctx.lineTo(fx0 + Math.sin(ang) * len * 0.8, fy0 - Math.cos(ang) * len * 0.8); ctx.stroke(); }
+      ctx.strokeStyle = 'rgba(230,248,255,.9)'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.ellipse(px, py, 27, 23, 0, 0.3, 2.6); ctx.stroke();
+      // gouttes
+      ctx.fillStyle = '#eaf9ff'; for (let i = 0; i < 6; i++) { const q = (time * 1.3 + i * 0.37) % 1; ctx.globalAlpha = (1 - q) * 0.8 * fade; ctx.beginPath(); ctx.arc(px + Math.sin(i * 2.1) * 30, py - 20 - q * 30, 3 - q * 2 + 1, 0, PI2); ctx.fill(); }
+      ctx.restore();
+    }
+  };
+
+  WB.GUIDE.water = ['Pastèque', 'Une vague d\'eau, puis, au niveau 4, une main d\'eau qui sort du sol.', ['Une seule vague qui part dans la direction du stick, blesse et repousse.', 'Deux vagues successives : la seconde repousse l\'adversaire encore plus loin.', 'Trois vagues successives, la troisième projette le plus fort. Dégâts totaux plus élevés.', 'Une grande main d\'eau sort du sol sous un seul adversaire, l\'attrape et le projette violemment.', 'Rayon d\'action visible autour de toi : une main d\'eau attrape chaque adversaire dans la zone, en même temps.']];
+})(window.WB);

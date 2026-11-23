@@ -200,8 +200,8 @@
     const f = G.player; if (!f || !f.alive || G.over) return;
     // zones de capacité prêtes
     for (const ab of f.slots) {
-      if (!ab) continue; const def = A[ab.id]; if (def.type !== 'zone' || ab.cd > 0) continue;
-      const r = def.range(ab.lvl); if (r > 270) continue;
+      if (!ab) continue; const def = A[ab.id]; const eau5 = ab.id === 'water' && ab.lvl >= 5; if ((def.type !== 'zone' && !eau5) || (ab.cd > 0 && !eau5)) continue;
+      const r = def.range(ab.lvl); if (r > 270 && !eau5) continue;
       const near = G.enemiesIn(f, f.x, f.y, r).length > 0, p = 0.5 + 0.5 * Math.sin(time * 8);
       ctx.save(); ctx.strokeStyle = def.col; ctx.globalAlpha = near ? 0.55 + 0.4 * p : 0.12; ctx.lineWidth = near ? 4 : 2; ctx.setLineDash(near ? [] : [8, 8]);
       ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, PI2); ctx.stroke();

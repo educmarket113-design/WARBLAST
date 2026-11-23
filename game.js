@@ -19,7 +19,7 @@
   WB.startMatch = function (cfg) {
     const W = WB.makeWorld(cfg.arena, (Math.random() * 1e9) | 0);
     const G = WB.G = {
-      cfg: cfg, world: W, F: [], pickups: [], projs: [], fxs: [], walls: [], turrets: [], clowns: [], holes: [], timers: [], spiders: [], feed: [],
+      cfg: cfg, world: W, F: [], pickups: [], projs: [], fxs: [], walls: [], turrets: [], clowns: [], holes: [], hands: [], timers: [], spiders: [], feed: [],
       t: 0, timeLeft: cfg.duration || MATCH_TIME, score: {}, over: false, shakeV: 0, cam: { x: 0, y: 0 }, player: null, swap: null, spawnT: 0, heartT: 0, coinsGot: 0,
       mode: WB.MODES.find(m => m.id === cfg.mode), results: null, paused: false, started: false, countdown: 3.2
     };
@@ -637,6 +637,7 @@
       if (G.formPrompt) { const fp = G.formPrompt; fp.t -= dt; if (!G.player.slots.includes(fp.ab) || fp.ab.form) G.formPrompt = null; else if (fp.t <= 0) { fp.ab.form = 'shark'; G.formPrompt = null; } }
       spawnPickups(dt);
       // effets
+      if (WB.updateHands) WB.updateHands(dt);
       for (let i = G.fxs.length - 1; i >= 0; i--) { const e = G.fxs[i]; e.t += dt; if (e.t >= e.life) G.fxs.splice(i, 1); }
       G.shakeV *= Math.exp(-9 * dt);
       for (let i = G.feed.length - 1; i >= 0; i--) if (G.t - G.feed[i].t > 6) G.feed.splice(i, 1);
@@ -736,6 +737,7 @@
     for (const p of G.projs) drawProj(ctx, p, time);
     // effets
     for (const e of G.fxs) drawFx(ctx, e, G, time);
+    if (WB.drawHands) WB.drawHands(ctx, G, time);
     // torches et obscurité du donjon
     if (S.arena === 'donjon') {
       ctx.fillStyle = 'rgba(4,4,18,.34)'; ctx.fillRect(vx0 - 10, vy0 - 10, vw + 20, vh + 20);
@@ -864,6 +866,7 @@
       case 'burst': ctx.fillStyle = e.col; ctx.globalAlpha = a; for (const p of e.ps) { ctx.beginPath(); ctx.arc(e.x + p.vx * e.t, e.y + p.vy * e.t, p.r * a + 0.5, 0, PI2); ctx.fill(); } ctx.globalAlpha = 1; break;
       case 'boom': { const g = ctx.createRadialGradient(e.x, e.y, 2, e.x, e.y, 80 * Math.min(1, u * 3 + 0.2)); g.addColorStop(0, 'rgba(255,250,210,' + a + ')'); g.addColorStop(0.45, 'rgba(255,150,40,' + a * 0.8 + ')'); g.addColorStop(1, 'rgba(255,60,10,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(e.x, e.y, 82, 0, PI2); ctx.fill(); break; }
       case 'text': ctx.font = 'bold ' + e.size + 'px "Trebuchet MS",sans-serif'; ctx.textAlign = 'center'; ctx.globalAlpha = Math.min(1, a * 2); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.strokeText(e.txt, e.x, e.y - u * 34); ctx.fillStyle = e.col; ctx.fillText(e.txt, e.x, e.y - u * 34); ctx.globalAlpha = 1; break;
+      case 'tide': WB.drawTide(ctx, e, time); break;
       case 'wave': ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang); ctx.globalAlpha = a * 0.7; const rr = e.r * Math.min(1, u * 2.4 + 0.2); ctx.fillStyle = e.col; ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, rr, -e.half, e.half); ctx.closePath(); ctx.globalAlpha = a * 0.35; ctx.fill(); ctx.globalAlpha = a; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(0, 0, rr, -e.half, e.half); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1; break;
       case 'arc': ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.ang); ctx.globalAlpha = a; ctx.strokeStyle = e.col; ctx.lineWidth = 12 * a + 2; ctx.lineCap = 'round'; const s0 = e.side > 0 ? -e.half : e.half, s1 = e.side > 0 ? e.half : -e.half; ctx.beginPath(); ctx.arc(0, 0, e.r * 0.85, s0, s0 + (s1 - s0) * Math.min(1, u * 2.5), e.side < 0); ctx.stroke(); ctx.restore(); ctx.globalAlpha = 1; break;
       case 'warn': ctx.strokeStyle = e.col; ctx.lineWidth = 3; ctx.globalAlpha = 0.5 + 0.5 * Math.sin(time * 30); ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, PI2); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1; break;
