@@ -387,3 +387,102 @@ WB.GUIDE.fire = ['Piment', 'Boules de feu, rayons, puis lance-flammes. La brûlu
     }
   };
 })(window.WB);
+
+// ===================== VENT : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, W = A.wind;
+  const R1 = 270, CARRY = 0.9, THROW = 2000;
+  W.range = function (L) { return L === 1 ? R1 : L === 2 ? 2 * R1 : L === 3 ? 340 : L === 4 ? 260 : 2 * R1; };
+  W.desc = 'Niv.1 : repousse un ennemi. Niv.2 : onde à 360° (portée x2). Niv.3 : un tourbillon. Niv.4 : deux tourbillons. Niv.5 : onde 360° puis quatre tourbillons.';
+  W.ai = { max: function (L) { return L <= 2 ? 250 : 220; }, min: 0 };
+  const dmgOf = function (L) { return 14 + 4 * L; }, stunOf = function (L) { return 1 + 0.15 * L; };   // valeurs d'origine conservées
+
+  function hitOne(f, t, L, a, force) { const g = G(); g.damage(t, dmgOf(L), f, 'wind'); g.knock(t, Math.cos(a), Math.sin(a), force); g.status(t, 'stun', stunOf(L)); }
+
+  function target1(f, aim, R) {
+    const g = G(); let t = aim.target && aim.target.alive ? aim.target : null; if (t && Math.hypot(t.x - f.x, t.y - f.y) > R * 1.15) t = null;
+    if (!t) { const base = Math.atan2(aim.y, aim.x); let bs = 1e9; for (const e of g.enemiesIn(f, f.x, f.y, R)) { const a = Math.atan2(e.y - f.y, e.x - f.x); let da = Math.abs(a - base); if (da > Math.PI) da = PI2 - da; if (da > 0.6) continue; const s = da * 400 + Math.hypot(e.x - f.x, e.y - f.y); if (s < bs) { bs = s; t = e; } } }
+    return t;
+  }
+  function wave360(f, L, R) {
+    const g = G(); g.fx('wave', f.x, f.y, { ang: 0, r: R, half: Math.PI, col: '#d6f4ee', life: 0.5 }); g.fx('ring', f.x, f.y, { r: R, col: '#ffffff', life: 0.5, w: 6 });
+    for (const t of g.enemiesIn(f, f.x, f.y, R)) hitOne(f, t, L, Math.atan2(t.y - f.y, t.x - f.x), 700);
+    g.sfx('wind'); if (f === g.player) g.shake(3);
+  }
+  function spawn(f, L, o) { const g = G(); g.whirls = g.whirls || []; const w = Object.assign({ f: f, L: L, x: f.x, y: f.y, t: 0, ang: 0, caps: [], taken: 0, max: 2, dead: false, vx: 0, vy: 0 }, o); g.whirls.push(w); g.fx('burst', f.x, f.y, { col: '#d6f4ee', n: 10, life: 0.4 }); return w; }
+
+  W.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl;
+    if (L === 1) {
+      const t = target1(f, aim, R1), a = t ? Math.atan2(t.y - f.y, t.x - f.x) : Math.atan2(aim.y, aim.x), d = t ? Math.hypot(t.x - f.x, t.y - f.y) : 160;
+      g.fx('wave', f.x, f.y, { ang: a, r: Math.min(R1, d + 40), half: 0.22, col: '#d6f4ee', life: 0.4 }); g.sfx('wind');
+      if (t) hitOne(f, t, L, a, 700);
+    } else if (L === 2) { wave360(f, L, 2 * R1); }
+    else if (L === 3) { spawn(f, L, { mode: 'spiral', life: 3.6, ang: Math.atan2(aim.y, aim.x) }); g.sfx('wind'); }
+    else if (L === 4) { for (let i = 0; i < 2; i++) spawn(f, L, { mode: 'orbit', rad: 85, spd: 4.5, life: 6, ang: i * Math.PI }); g.sfx('wind'); }
+    else {
+      wave360(f, L, 2 * R1);
+      g.later(0.35, function () { if (!f.alive) return; for (let i = 0; i < 2; i++) spawn(f, L, { mode: 'orbit', rad: 75, spd: 4.2, life: 8, ang: i * Math.PI, role: 'def' }); for (let i = 0; i < 2; i++) spawn(f, L, { mode: 'hunt', life: 7, ang: i * Math.PI + 1, role: 'off' }); g.sfx('wind'); });
+    }
+  };
+
+  function release(w, t, throwIt) {
+    const g = G(), f = w.f; t.whirl = null; t.jumpH = 0; t.windImm = 1.4;
+    if (!throwIt || !t.alive) return;
+    let dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy); if (d < 20) { dx = w.vx || 1; dy = w.vy || 0; d = Math.hypot(dx, dy) || 1; } dx /= d; dy /= d;
+    g.damage(t, dmgOf(w.L), f, 'wind'); g.knock(t, dx, dy, THROW); g.fx('burst', t.x, t.y, { col: '#e8fffb', n: 12, life: 0.5 }); g.fx('ring', t.x, t.y, { r: 50, col: '#ffffff', life: 0.35, w: 4 });
+  }
+
+  WB.updateWhirls = function (dt) {
+    const g = G(); if (!g || !g.whirls) return;
+    for (let i = g.whirls.length - 1; i >= 0; i--) {
+      const w = g.whirls[i], f = w.f; w.t += dt; w.rot = (w.rot || 0) + dt * 11;
+      if (!f.alive) { w.caps.forEach(function (c) { release(w, c.t, false); }); w.caps = []; g.whirls.splice(i, 1); continue; }
+      // déplacement
+      if (w.mode === 'spiral') { w.ang += 6 * dt; const u = Math.min(1, w.t / 3.4), rad = 45 + 295 * Math.pow(u, 1.2); w.x = f.x + Math.cos(w.ang) * rad; w.y = f.y + Math.sin(w.ang) * rad; }
+      else if (w.mode === 'orbit') { w.ang += w.spd * dt; const nx = f.x + Math.cos(w.ang) * w.rad, ny = f.y + Math.sin(w.ang) * w.rad; w.vx = nx - w.x; w.vy = ny - w.y; w.x = nx; w.y = ny; }
+      else if (w.mode === 'away') { w.x += w.dx * 190 * dt; w.y += w.dy * 190 * dt; if (g.world.solidAt(w.x, w.y)) { w.x -= w.dx * 190 * dt; w.y -= w.dy * 190 * dt; const ox = w.dx; w.dx = -w.dy; w.dy = ox; } if (Math.hypot(w.x - f.x, w.y - f.y) > 260 && !w.caps.length) w.life = Math.min(w.life, w.t + 0.3); }
+      else if (w.mode === 'hunt') {
+        let best = null, bd = 1e9; for (const t of g.F) { if (!t.alive || t.team === f.team || t.whirl || t.ghost || t.st.jump || (t.windImm || 0) > 0) continue; const d = Math.hypot(t.x - w.x, t.y - w.y); if (d < bd) { bd = d; best = t; } }
+        let tx, ty; if (best) { tx = best.x - w.x; ty = best.y - w.y; } else { tx = Math.cos(w.t * 1.3 + w.ang) * 40; ty = Math.sin(w.t * 1.7 + w.ang) * 40; }
+        const d = Math.hypot(tx, ty) || 1, sp = w.caps.length ? 150 : 235; w.vx += ((tx / d) * sp - w.vx) * Math.min(1, 4 * dt); w.vy += ((ty / d) * sp - w.vy) * Math.min(1, 4 * dt);
+        if (w.caps.length) { const ax = w.x - f.x, ay = w.y - f.y, ad = Math.hypot(ax, ay) || 1; w.vx = ax / ad * sp; w.vy = ay / ad * sp; }   // il emporte sa prise loin du lanceur
+        const nx = w.x + w.vx * dt, ny = w.y + w.vy * dt; if (!g.world.solidAt(nx, ny)) { w.x = nx; w.y = ny; } else { w.vx = -w.vx; w.vy = -w.vy; }
+      }
+      // captures
+      if (w.taken < w.max) for (const t of g.F) {
+        if (w.taken >= w.max) break; if (!t.alive || t.team === f.team || t.whirl || t.ghost || t.st.jump || (t.windImm || 0) > 0 || t.swallowed) continue;
+        if (Math.hypot(t.x - w.x, t.y - w.y) < 34 + t.r) {
+          w.taken++; w.caps.push({ t: t, age: 0 }); t.whirl = w; t.kx = t.ky = 0; g.status(t, 'stun', CARRY + stunOf(w.L)); g.fx('ring', t.x, t.y, { r: 44, col: '#ffffff', life: 0.35, w: 4 }); g.sfx('wind');
+          if (w.mode === 'orbit') { let dx = w.x - f.x, dy = w.y - f.y; const d = Math.hypot(dx, dy) || 1; w.mode = 'away'; w.dx = dx / d; w.dy = dy / d; w.life = Math.max(w.life, w.t + 2.5); }
+        }
+      }
+      // captifs emportés puis lancés
+      for (let k = w.caps.length - 1; k >= 0; k--) {
+        const c = w.caps[k], t = c.t; c.age += dt;
+        if (!t.alive) { release(w, t, false); w.caps.splice(k, 1); continue; }
+        const a = c.age * 9 + k * Math.PI, nx = w.x + Math.cos(a) * 22, ny = w.y + Math.sin(a) * 22; if (!g.world.solidAt(nx, ny)) { t.x = nx; t.y = ny; } t.vx = t.vy = 0; t.jumpH = 22 + 8 * Math.sin(c.age * 12);
+        if (c.age >= CARRY) { release(w, t, true); w.caps.splice(k, 1); }
+      }
+      if (w.t >= w.life || (w.taken >= w.max && !w.caps.length && w.t > 0.2)) { w.caps.forEach(function (c) { release(w, c.t, false); }); g.fx('burst', w.x, w.y, { col: '#d6f4ee', n: 8, life: 0.4 }); g.whirls.splice(i, 1); }
+    }
+    for (const t of g.F) if ((t.windImm || 0) > 0) t.windImm -= dt;
+  };
+
+  function drawTornado(ctx, w, time) {
+    const fade = Math.min(1, (w.life - w.t) / 0.4, w.t / 0.2 + 0.2), H = 70;
+    ctx.save(); ctx.globalAlpha = 0.22 * fade; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(w.x, w.y + 6, 22, 8, 0, 0, PI2); ctx.fill();
+    for (let i = 0; i < 9; i++) {
+      const u = i / 8, y = w.y + 4 - u * H, rx = 9 + u * 26, ry = rx * 0.32, ph = w.rot * (1.2 - u * 0.5) + i * 0.9, sx = Math.sin(time * 3 + i) * 3 * u;
+      ctx.globalAlpha = (0.9 - u * 0.25) * fade; ctx.strokeStyle = i % 2 ? '#ffffff' : '#8fd8cc'; ctx.lineWidth = 5; ctx.beginPath(); ctx.ellipse(w.x + sx, y, rx, ry, 0, ph, ph + 4.2); ctx.stroke();
+      ctx.globalAlpha = 0.18 * fade; ctx.fillStyle = '#d6f4ee'; ctx.beginPath(); ctx.ellipse(w.x + sx, y, rx, ry, 0, 0, PI2); ctx.fill();
+    }
+    ctx.globalAlpha = 0.7 * fade; ctx.fillStyle = '#ffffff'; for (let k = 0; k < 6; k++) { const a = w.rot * 1.6 + k * 1.05, u = (k * 0.17 + time * 0.8) % 1; ctx.beginPath(); ctx.arc(w.x + Math.cos(a) * (12 + 22 * u), w.y - u * H + 4, 2, 0, PI2); ctx.fill(); }
+    ctx.restore();
+  }
+  const upd = WB.updateHands, drw = WB.drawHands;
+  WB.updateHands = function (dt) { upd(dt); WB.updateWhirls(dt); };
+  WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); if (g.whirls) for (const w of g.whirls) drawTornado(ctx, w, time); };
+})(window.WB);
+WB.GUIDE.wind = ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un souffle qui repousse un seul ennemi.', 'Onde à 360° : tous les ennemis dans un rayon deux fois plus grand.', 'Un tourbillon visible qui tourne autour de toi puis s\'éloigne ; il capture 2 ennemis au plus et les projette.', 'Deux tourbillons qui t\'accompagnent ; celui qui capture s\'éloigne avec sa prise.', 'Onde 360°, puis 4 tourbillons : 2 gardes autour de toi, 2 chasseurs qui poursuivent les ennemis.']];
