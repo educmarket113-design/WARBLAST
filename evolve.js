@@ -1322,3 +1322,134 @@ WB.GUIDE.shield = ['Pomme verte', 'Bouclier de 10 s, jamais invincible. Recharge
   WB.drawHands = function (ctx, g, time) { d2(ctx, g, time); WB.drawTp(ctx, g, time); };
 })(window.WB);
 WB.GUIDE.tp = ['Fruit du dragon', 'Téléportation instantanée, sans jamais traverser un mur. Fenêtre de 10 s, recharge 5 s.', ['Une téléportation courte dans la direction choisie.', 'Tu apparais derrière l\'adversaire visé, face à lui.', 'Trois téléportations successives, une par commande.', 'Chaque téléportation laisse une image fantôme qui trompe les ennemis.', 'Cinq téléportations avec fantômes, puis une onde qui blesse et repousse (à toi de la déclencher).']];
+
+// ===================== VITESSE : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, D = A.dash;
+  const RUSH = 1700;                                              // vitesse de charge : celle du moteur existant (f.dash)
+  const V = {
+    1: { dmg: 24, knock: 220 },
+    2: { dmg: 42, knock: 640 },
+    3: { dmg: 40, knock: 440, wave: { R: 135, dmg: 20, knock: 320 } },
+    4: { dmg: 50, knock: 110, strikes: 5 },
+    5: { dmg: 60, fist: 11, fistEvery: 0.07, fistTime: 2.0, targets: 2 }
+  };
+  D.range = function (L) { return L >= 4 ? 330 : 290; };
+  D.ai = { max: function (L) { return L >= 4 ? 330 : 290; }, min: 50, cond: function () { return true; } };
+  D.desc = 'Charge automatique sur un adversaire. Niv.2 : plus fort et repousse. Niv.3 : onde de choc. Niv.4 : 5 frappes en chaîne sur des cibles différentes. Niv.5 : rafale de poings sur deux adversaires.';
+
+  const valid = function (t) { return t.alive && !t.st.jump && !t.ghost && !t.decoy; };
+  function pick(g, f, v) {
+    const R = D.range(v.L), list = g.enemiesIn(f, f.x, f.y, R).filter(valid); if (!list.length) return null;
+    let pool;
+    if (v.L === 5) pool = list.filter(function (t) { return !v.used[t.id]; });                  // deux adversaires différents
+    else if (v.L === 4) { pool = list.filter(function (t) { return t !== v.last; }); if (!pool.length) pool = list; }   // un autre adversaire si possible, sinon le même
+    else pool = list;
+    if (!pool.length) return null;
+    if (v.L === 4) { const m = Math.min.apply(null, pool.map(function (t) { return v.count[t.id] || 0; })); pool = pool.filter(function (t) { return (v.count[t.id] || 0) === m; }); }   // répartition entre les adversaires
+    pool.sort(function (a, b) { return Math.hypot(a.x - f.x, a.y - f.y) - Math.hypot(b.x - f.x, b.y - f.y); });
+    return pool[0];
+  }
+  function startRush(g, f, v, t) {
+    v.tgt = t; v.phase = 'rush'; v.tt = 0;
+    const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) || 1, hit = new Set(); for (const o of g.F) hit.add(o.id);     // la charge ne blesse que par l'impact géré ici
+    f.dash = { t: 9, dx: dx / d, dy: dy / d, hit: hit, dmg: 0, L: v.L, vit: true };
+    g.fx('ring', f.x, f.y, { r: 30, col: '#ffe27a', life: 0.3, w: 5 }); g.sfx('dash');
+  }
+  function finish(g, f) { const v = f.vit; f.vit = null; if (f.dash && f.dash.vit) { f.dash = null; f.vx = f.vy = 0; } }
+
+  D.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl; if (f.vit) return false;
+    const v = { L: L, ab: ab, phase: 'rush', tt: 0, wait: 0, fails: 0, strikes: 0, total: L === 4 ? 5 : L === 5 ? 2 : 1, last: null, used: {}, count: {}, fT: 0, fN: 0, tgt: null };
+    const t = pick(g, f, v); if (!t) return false;                                                // pas d'adversaire à portée : rien ne part, pas de charge
+    f.vit = v; startRush(g, f, v, t);
+  };
+
+  function impact(g, f, v, t) {
+    const L = v.L, c = V[L], dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d;
+    f.dash = null; f.vx = f.vy = 0;
+    v.strikes++; v.last = t; v.count[t.id] = (v.count[t.id] || 0) + 1; v.used[t.id] = true;
+    g.damage(t, c.dmg, f, 'dash'); if (c.knock) g.knock(t, ux, uy, c.knock);
+    g.vitFx = g.vitFx || []; g.vitFx.push({ x: t.x - ux * t.r * 0.6, y: t.y - uy * t.r * 0.6, t: 0, T: 0.35, L: L, a: Math.atan2(uy, ux) });
+    g.fx('burst', t.x, t.y, { col: '#ffe27a', n: 10 + 2 * L, life: 0.45 }); g.fx('ring', t.x, t.y, { r: 30 + 8 * L, col: '#ffffff', life: 0.25, w: 4 }); g.sfx('impact');
+    g.shake(L >= 2 ? 3 + L : 2);
+    if (L === 3) {
+      const w = c.wave; g.vitWaves = g.vitWaves || []; g.vitWaves.push({ x: t.x, y: t.y, t: 0, R: w.R });
+      g.splash(f, t.x, t.y, w.R, w.dmg, 'dash', { knock: w.knock }); g.shake(7); g.fx('ring', t.x, t.y, { r: w.R, col: '#ffd24a', life: 0.5, w: 9 });
+    }
+    if (L === 5) { v.phase = 'fists'; v.fT = 0; v.fN = 0; v.fAcc = 0; g.status(t, 'stun', c.fistTime + 0.2); return; }
+    if (v.strikes >= v.total) { finish(g, f); return; }
+    v.phase = 'wait'; v.wait = 0.12;
+  }
+
+  WB.updateVit = function (dt) {
+    const g = G(); if (!g) return;
+    for (const f of g.F) {
+      const v = f.vit; if (!v) continue;
+      if (!f.alive || f.respawnT > 0 || f.st.stun > 0 || f.st.frozen > 0 || g.over) { f.vit = null; if (f.dash && f.dash.vit) f.dash = null; continue; }
+      f.st.root = Math.max(f.st.root || 0, 0.1);
+      if (v.phase === 'rush') {
+        const t = v.tgt; v.tt += dt;
+        if (!t || !valid(t)) { f.dash = null; const n = pick(g, f, v); if (!n || ++v.fails > 4) { finish(g, f); continue; } startRush(g, f, v, n); continue; }
+        const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy) || 1;
+        if (f.dash) { f.dash.dx = dx / d; f.dash.dy = dy / d; f.dash.t = 9; }
+        if (d < f.r + t.r * (t.scale || 1) + 9) { impact(g, f, v, t); continue; }
+        if (v.tt > 0.6) { f.dash = null; const n = pick(g, f, v); if (!n || ++v.fails > 4) { finish(g, f); continue; } startRush(g, f, v, n); }    // charge bloquée : on recible, jamais de boucle infinie
+      } else if (v.phase === 'wait') {
+        v.wait -= dt; if (v.wait <= 0) { const n = pick(g, f, v); if (!n) { finish(g, f); continue; } startRush(g, f, v, n); }
+      } else if (v.phase === 'fists') {
+        const t = v.tgt, c = V[5]; v.fT += dt;
+        if (!t || !valid(t)) { v.fT = c.fistTime; }
+        else {
+          t.st.stun = Math.max(t.st.stun || 0, 0.3);                                                  // étourdi pendant toute la rafale
+          v.fAcc = (v.fAcc || 0) + dt;
+          while (v.fAcc >= c.fistEvery) { v.fAcc -= c.fistEvery; v.fN++; g.damage(t, c.fist, f, 'dash'); if (v.fN % 3 === 0) { g.fx('burst', t.x + (Math.random() - 0.5) * 20, t.y + (Math.random() - 0.5) * 20, { col: '#fff3a0', n: 4, life: 0.25 }); g.sfx('hit'); } }
+        }
+        if (v.fT >= c.fistTime) {
+          if (t && t.st.stun > 0.3) t.st.stun = 0.3;
+          if (v.strikes >= v.total) { finish(g, f); continue; }
+          const n = pick(g, f, v); if (!n) { finish(g, f); continue; }                                   // pas de second adversaire : on termine normalement
+          startRush(g, f, v, n);
+        }
+      }
+    }
+    if (g.vitFx) { for (const e of g.vitFx) e.t += dt; g.vitFx = g.vitFx.filter(function (e) { return e.t < e.T; }); }
+    if (g.vitWaves) { for (const w of g.vitWaves) w.t += dt; g.vitWaves = g.vitWaves.filter(function (w) { return w.t < 0.55; }); }
+  };
+
+  WB.drawVit = function (c, g, time) {
+    if (g.vitWaves) for (const w of g.vitWaves) {
+      const u = w.t / 0.55, r = w.R * (0.15 + 0.85 * u), gr = c.createRadialGradient(w.x, w.y, r * 0.6, w.x, w.y, r); gr.addColorStop(0, 'rgba(255,226,122,0)'); gr.addColorStop(1, 'rgba(255,226,122,' + 0.35 * (1 - u) + ')');
+      c.fillStyle = gr; c.beginPath(); c.arc(w.x, w.y, r, 0, PI2); c.fill();
+      c.strokeStyle = 'rgba(255,255,255,' + (1 - u) + ')'; c.lineWidth = 10 * (1 - u) + 2; c.beginPath(); c.arc(w.x, w.y, r, 0, PI2); c.stroke();
+      c.strokeStyle = 'rgba(255,210,74,' + (0.8 * (1 - u)) + ')'; c.lineWidth = 5 * (1 - u) + 1; c.beginPath(); c.arc(w.x, w.y, r * 0.72, 0, PI2); c.stroke();
+    }
+    if (g.vitFx) for (const e of g.vitFx) {
+      const u = e.t / e.T; c.save(); c.translate(e.x, e.y); c.globalAlpha = 1 - u; c.strokeStyle = '#fff3a0'; c.lineWidth = 3; c.lineCap = 'round';
+      for (let k = 0; k < 8; k++) { const a = k / 8 * PI2 + e.a, r0 = 8 + 14 * u, r1 = 20 + 22 * u + 6 * e.L; c.beginPath(); c.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); c.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); c.stroke(); } c.restore();
+    }
+    for (const f of g.F) {
+      const v = f.vit; if (!v || !f.alive) continue;
+      if (f.dash && f.dash.vit) {                                    // traînées de vitesse en plus des effets déjà présents
+        c.save(); c.strokeStyle = 'rgba(255,226,122,.7)'; c.lineWidth = 3; c.lineCap = 'round';
+        for (let k = -2; k <= 2; k++) { const px = -f.dash.dy * k * 8, py = f.dash.dx * k * 8, len = 70 + 30 * (2 - Math.abs(k)); c.beginPath(); c.moveTo(f.x + px, f.y + py); c.lineTo(f.x + px - f.dash.dx * len, f.y + py - f.dash.dy * len); c.stroke(); } c.restore();
+      }
+      if (v.phase === 'fists' && v.tgt && v.tgt.alive) {
+        const t = v.tgt, a0 = Math.atan2(t.y - f.y, t.x - f.x), dist = Math.hypot(t.x - f.x, t.y - f.y), n = 7;
+        c.save();
+        for (let k = 0; k < n; k++) {
+          const p = (time * 8.5 + k / n) % 1, u = Math.sin(p * Math.PI), sp = (k / (n - 1) - 0.5) * 1.5, a = a0 + sp * 0.55, reach = Math.max(8, dist - t.r * 0.7 - f.r) , len = f.r + 4 + reach * u;
+          const fx = f.x + Math.cos(a) * len, fy = f.y + Math.sin(a) * len + sp * 10;
+          c.strokeStyle = 'rgba(255,240,200,' + (0.5 * u) + ')'; c.lineWidth = 5; c.lineCap = 'round'; c.beginPath(); c.moveTo(f.x + Math.cos(a) * f.r, f.y + Math.sin(a) * f.r + sp * 10); c.lineTo(fx, fy); c.stroke();
+          c.fillStyle = k % 2 ? '#ff7a5a' : '#ffb04a'; c.strokeStyle = '#ffffff'; c.lineWidth = 2.5; c.beginPath(); c.arc(fx, fy, 9 + 3 * u, 0, PI2); c.fill(); c.stroke();
+          if (u > 0.85) { c.strokeStyle = '#fff3a0'; c.lineWidth = 2.5; for (let q = 0; q < 5; q++) { const aa = q / 5 * PI2 + time * 9; c.beginPath(); c.moveTo(fx + Math.cos(aa) * 10, fy + Math.sin(aa) * 10); c.lineTo(fx + Math.cos(aa) * 20, fy + Math.sin(aa) * 20); c.stroke(); } }
+        }
+        c.restore();
+      }
+    }
+  };
+  const u3 = WB.updateHands, d3 = WB.drawHands;
+  WB.updateHands = function (dt) { u3(dt); WB.updateVit(dt); };
+  WB.drawHands = function (ctx, g, time) { d3(ctx, g, time); WB.drawVit(ctx, g, time); };
+})(window.WB);

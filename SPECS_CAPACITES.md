@@ -129,3 +129,15 @@ Cette spécification remplace l'ancienne téléportation (balise + ennemi télé
 - Équipe : mêmes règles. Les fantômes et l'onde ne concernent que les adversaires, jamais les alliés.
 - Choix à valider : le niveau 4 garde 3 téléportations (la spécification ne le précise pas) ; aux niveaux 3 à 5 un appui simple avec un adversaire à portée te place derrière lui.
 - Tests : t91 (32 vérifications, dont 60 téléportations sur le terrain réel de l'arène sans aucune destination invalide ni mur traversé), régressions t60 40/40, t72 15/15, t83 19/19, t85 20/20, t89 31/31, t70/t74/t79/t81 sans erreur JS. Non testé : téléphone réel, multijoueur réseau, combat prolongé contre des bots qui visent les fantômes.
+
+## VITESSE, niveaux 1 à 5 — en attente de validation
+
+Capacité offensive : elle blesse dès le niveau 1. Elle réutilise la charge et les traînées de vitesse déjà présentes dans le jeu (la charge passe par le mouvement de ruée existant à 1700 px/s), avec en plus des lignes de vitesse, des étoiles d'impact et des ondes. Chaque niveau a 5 charges ; une activation consomme une charge, quel que soit le nombre de frappes. Pas de seconde activation pendant la séquence ; la séquence s'interrompt si le lanceur est étourdi, gelé ou meurt.
+- Ciblage automatique dans toutes les directions autour du lanceur, rayon 290 (niveaux 1 à 3) et 330 (niveaux 4 et 5). Sans adversaire à portée, rien ne part et aucune charge n'est consommée. Les alliés ne sont jamais ciblés.
+- Niv. 1 : charge sur le plus proche, un seul adversaire, 24 dégâts, léger recul.
+- Niv. 2 : charge renforcée, 42 dégâts, recul fort (environ 2 fois celui du niveau 1).
+- Niv. 3 : 40 dégâts plus une onde de choc au point d'impact (rayon 135, 20 dégâts supplémentaires à tous les adversaires proches, y compris la cible, et repousse), avec une propagation visible.
+- Niv. 4 : 5 frappes de 50 dégâts en une seule activation. Chaque frappe vise de préférence un adversaire différent du précédent, en répartissant les frappes ; si un seul est à portée, les frappes se concentrent sur lui. Recul léger (110) pour que les cibles restent à portée. Une cible morte en route est remplacée. 5 échecs de charge (obstacle) au maximum, puis la séquence se termine : pas de boucle infinie.
+- Niv. 5 : charge, 60 dégâts à l'impact, puis rafale de poings pendant 2,0 s (7 poings visibles, un coup de 11 toutes les 0,07 s, environ 300 dégâts par adversaire en tout). L'adversaire est étourdi pendant toute la rafale puis libéré. Ensuite le lanceur fonce sur un deuxième adversaire différent et refait la même rafale ; les deux séquences ne se chevauchent jamais. Sans deuxième adversaire, la séquence se termine normalement.
+- Total par activation : niveau 4 : 250 ; niveau 5 : environ 740 sur deux adversaires.
+- Tests : t93 (17 vérifications, 17/17 quatre fois) ; régressions t60 40/40, t83 19/19, t85 20/20, t89 31/31, t91 32/32, t70/t74/t81 sans erreur JS ; t72 (fusion) a des vérifications instables liées au hasard des bots, 15/15 trois fois sur quatre. Test avec bots libres pendant 12 s sans erreur JS. Non testé : téléphone réel, multijoueur réseau.
