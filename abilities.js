@@ -337,6 +337,6 @@
     return 'fire';
   };
   // nombre d'utilisations avant recharge : 5 pour toutes les capacités, 2 pour le trou noir
-  WB.maxCharges = ab => (ab && ab.id === 'hole') ? 2 : (ab && ab.id === 'shield') ? 1 : 5;
+  WB.maxCharges = ab => (ab && ab.id === 'hole') ? 2 : (ab && (ab.id === 'shield' || ab.id === 'tp')) ? 1 : 5;
   WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: WB.maxCharges({ id: id }), gap: 0 }; };
 })(window.WB);

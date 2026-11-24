@@ -301,7 +301,8 @@
     // ---- utilisation des capacités ----
     G.canCast = f => f.alive && !(f.st.frozen > 0) && !(f.st.silence > 0) && !(f.st.jump || f.ghost) && G.started;
     G.useSlot = function (f, i, aim) {
-      const ab = f.slots[i]; if (!ab || !G.canCast(f) || ab.cd > 0 || ab.gap > 0) return false;
+      const ab = f.slots[i]; if (ab && ab.id === 'tp' && f.tp && WB.tpNext) return WB.tpNext(f, ab, aim);
+      if (!ab || !G.canCast(f) || ab.cd > 0 || ab.gap > 0) return false;
       const def = A[ab.id]; if (def.type === 'aim' && aim.m == null) aim.m = 0.7;
       G.muteSfx = true; let r; try { r = def.cast(f, ab, aim); } finally { G.muteSfx = false; } if (r === false) return false;
       f.castT = 0.4; if (WB.evoFx) WB.evoFx(f, ab); { const pl = G.player, dd = pl ? Math.hypot(pl.x - f.x, pl.y - f.y) : 0, vv = f === pl ? 1 : Math.max(0, 1 - dd / 700) * 0.8; if (vv > 0.05) WB.snd.play('ab_' + ab.id, vv); }
@@ -419,6 +420,7 @@
       for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; const d0 = dist(f, t), d = (f.team !== 'S' && t.team === 'S') ? d0 * 1.5 : d0; if (d0 < sight && d < bd && G.visibleTo(f, t)) { bd = d; best = t; } }
       if (best) bd = dist(f, best);
       if (f.home) { const lim = f.kind === 'boss' ? 560 : 460; if (best && Math.hypot(best.x - f.home.x, best.y - f.home.y) > lim) best = null; if (!best && dist(f, f.home) > lim * 0.7) { ai.target = null; ai.mode = 'goto'; ai.goal = { x: f.home.x, y: f.home.y }; return; } }
+      if (WB.tpBait) { const bt = WB.tpBait(f, best, sight); if (bt) best = bt; }
       ai.target = best; ai.mode = 'wander';
       if (f.kind === 'thrall' || f.kind === 'golem' || f.thrall) { ai.mode = best ? 'fight' : 'follow'; return; }
       if (f.hp < f.maxhp * 0.35) {

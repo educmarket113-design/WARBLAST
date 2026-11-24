@@ -186,8 +186,9 @@
     const list = only != null ? [only] : f.loadout.filter(function (v) { return v != null; }); let fired = 0, noTarget = false;
     for (const i of list) {
       const ab0 = f.slots[i]; if (ab0 && ab0.id === 'shield' && f.sh && f.sh.L >= 4) { if (WB.shieldRelease(f)) fired++; else U.showToast('Jauge d\'énergie vide', '#ffd0a0'); continue; }
+      if (ab0 && ab0.id === 'tp' && f.tp) { if (!(ab0.gap > 0)) { if (G.useSlot(f, i, G.autoAim(f, ab0))) fired++; } continue; }
       const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
-      const au = G.autoAim(f, ab); if (!au.target && !NOTARGET_OK[ab.id] && !(ab.id === 'ice' && ab.lvl >= 5) && !(ab.id === 'wall' && ab.lvl >= 5)) { noTarget = true; continue; }
+      let au = G.autoAim(f, ab); if (ab.id === 'tp' && ab.lvl === 1) au = { x: f.face.x, y: f.face.y, m: 1 }; if (!au.target && !NOTARGET_OK[ab.id] && !(ab.id === 'ice' && ab.lvl >= 5) && !(ab.id === 'wall' && ab.lvl >= 5) && !(ab.id === 'tp' && ab.lvl !== 2)) { noTarget = true; continue; }
       if (G.useSlot(f, i, au)) fired++;
     }
     if (!fired && noTarget) U.showToast('Aucun adversaire à portée', '#ffd0a0');
@@ -198,7 +199,8 @@
     const dx = st.x - U.atk.A.x, dy = st.y - U.atk.A.y, d = Math.hypot(dx, dy), R = U.atk.R; if (d < R * 0.28) return;
     const ux = dx / d, uy = dy / d, m = clamp(d / R, 0.25, 1), list = st.only != null ? [st.only] : f.loadout.filter(function (v) { return v != null; });
     for (const i of list) {
-      const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
+      const ab = f.slots[i]; if (ab && ab.id === 'tp') { if (!st.tpDone && !(ab.gap > 0) && (f.tp || (!(ab.cd > 0) && !(ab.n != null && ab.n <= 0)))) { const au1 = G.autoAim(f, ab); let aim1 = { x: ux, y: uy, m: m }; if (au1.target && au1.x * ux + au1.y * uy >= 0.93) aim1 = au1; if (G.useSlot(f, i, aim1)) st.tpDone = true; } continue; }
+      if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
       const au = G.autoAim(f, ab); let aim = { x: ux, y: uy, m: m };
       if (au.target && au.x * ux + au.y * uy >= 0.93) aim = au;   // un adversaire dans la direction poussée : la capacité part sur lui
       G.useSlot(f, i, aim);
@@ -375,6 +377,11 @@
       if (!f.loadout.some(function (v) { return v != null; })) { text(n ? 'Glisse une capacité' : 'Ramasse un fruit', A0.x, A0.y - R - 14, 13, '#ffe9a8', 'center', 3); if (n && sy) { ctx.strokeStyle = 'rgba(255,233,168,' + (0.4 + 0.5 * pulse) + ')'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x, A0.y, R + 8, 0, PI2); ctx.stroke(); } }
       if (st) { const dx = st.x - A0.x, dy = st.y - A0.y, d = Math.hypot(dx, dy), q = d > R ? R / d : 1; ctx.fillStyle = 'rgba(255,230,160,.9)'; ctx.strokeStyle = 'rgba(120,70,10,.8)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(A0.x + dx * q, A0.y + dy * q, 16, 0, PI2); ctx.fill(); ctx.stroke(); }
       ctx.restore();
+    }
+    // téléportation niveau 5 : onde finale à la demande
+    if (f.tp && f.tp.L >= 5 && f.tp.used >= 1 && f.alive && !G.over) {
+      const bw = 150, bh = 34, rx = A0.x - bw / 2, ry = A0.y - R - 14 - bh - ((f.level || 1) >= 7 ? 40 : 0);
+      btn(rx, ry, bw, bh, { label: 'ONDE FINALE', size: 14, style: 'gold', fn: function () { WB.tpWave(f); } });
     }
     // bouclier niveaux 4 et 5 : libérer l'énergie absorbée
     if (f.sh && f.sh.L >= 4 && f.alive && !G.over) {

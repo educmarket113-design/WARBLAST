@@ -114,3 +114,18 @@ Le bouclier n'est plus une invulnérabilité : il a sa propre résistance, inter
 - Annulation (capacité Annulation) : retire le bouclier.
 - Tests : t89 (31 vérifications, 31/31 trois fois) pour les cinq niveaux en solo et en équipe ; régressions t60 40/40, t72 15/15, t83 19/19, t70/t74/t79/t81 sans erreur JS ; t85 a une vérification instable connue.
 - Non testé : téléphone réel, multijoueur réseau, combat prolongé contre les bots avec bouclier.
+
+## TÉLÉPORTATION, niveaux 1 à 5 — en attente de validation
+
+Cette spécification remplace l'ancienne téléportation (balise + ennemi téléporté). La capacité ne déplace plus jamais un autre personnage.
+- Tous niveaux : fenêtre d'activation de 10 s, puis recharge de 5 s dès la fin de la capacité (fin normale, toutes les téléportations utilisées, ou onde lancée). Une seule utilisation avant recharge ; pas de réactivation pendant la fenêtre ni la recharge. Les déplacements déjà faits sont conservés à l'expiration. Temps restant et nombre de téléportations restantes affichés sous le personnage.
+- Téléportation instantanée (pas de déplacement entre départ et arrivée), avec colonne de lumière violette et anneaux au départ et à l'arrivée.
+- Vérification de chaque destination : dans la carte, ni mur ni eau, pas sur un autre personnage, et aucun mur ni obstacle (y compris les murs de capacités) sur le trajet. La téléportation directionnelle retient le point valide le plus éloigné, sinon elle échoue. Une téléportation impossible ne déplace rien, ne consomme aucun déplacement et ne déclenche pas la recharge.
+- Niv. 1 : une téléportation de 240 px maximum dans la direction choisie (stick, ou direction du regard avec un simple appui). Une seule par activation, puis recharge de 5 s.
+- Niv. 2 : derrière l'adversaire visé (le plus proche, à moins de 380 px). Position calculée à l'opposé de l'approche, avec essais de côtés si elle est occupée ; le personnage se retrouve orienté vers l'adversaire. Sans adversaire ou sans position valide, rien ne se passe. Une seule par activation.
+- Niv. 3 : trois téléportations par activation, chacune sur une nouvelle commande (une par poussée du stick, 0,3 s minimum entre deux). Direction libre à chaque fois ; avec un adversaire visé, arrivée derrière lui. La fenêtre se ferme après la 3e.
+- Niv. 4 : comme le niveau 3 (trois téléportations) et chaque téléportation réussie laisse une image fantôme à l'ancien emplacement exact, visible 4,5 s puis qui s'estompe. Le fantôme est purement visuel : hors de la liste des combattants, sans collision, ni contrôle, ni attaque, ni dégâts, et les adversaires ne peuvent pas le viser avec leurs capacités. Les bots le prennent parfois pour cible.
+- Niv. 5 : cinq téléportations avec une image fantôme à chaque fois. Après au moins une téléportation, le bouton ONDE FINALE (ou un appui quand les cinq sont utilisées) déclenche une onde au point d'arrivée : 70 dégâts, repousse et étourdissement 0,4 s dans 210 px, adversaires seulement, une seule fois, puis la capacité se termine. Jamais déclenchée automatiquement, même si le temps expire.
+- Équipe : mêmes règles. Les fantômes et l'onde ne concernent que les adversaires, jamais les alliés.
+- Choix à valider : le niveau 4 garde 3 téléportations (la spécification ne le précise pas) ; aux niveaux 3 à 5 un appui simple avec un adversaire à portée te place derrière lui.
+- Tests : t91 (32 vérifications, dont 60 téléportations sur le terrain réel de l'arène sans aucune destination invalide ni mur traversé), régressions t60 40/40, t72 15/15, t83 19/19, t85 20/20, t89 31/31, t70/t74/t79/t81 sans erreur JS. Non testé : téléphone réel, multijoueur réseau, combat prolongé contre des bots qui visent les fantômes.

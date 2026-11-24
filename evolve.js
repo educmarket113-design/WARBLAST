@@ -1163,3 +1163,162 @@ WB.GUIDE.wall = ['Fruit de terre', 'Mur ou terre qui protège et blesse.', ['Un 
   WB.drawHands = function (ctx, g, time) { d1(ctx, g, time); WB.drawShields(ctx, g, time); };
 })(window.WB);
 WB.GUIDE.shield = ['Pomme verte', 'Bouclier de 10 s, jamais invincible. Recharge de 5 s après sa disparition.', ['Bouclier frontal : bloque ce qui vient de face, pas le dos ni les côtés.', 'Panneaux rotatifs : chacun bloque un impact.', 'Bouclier miroir : renvoie les projectiles à leur lanceur (parade ×2 dans les 0,4 premières secondes).', 'Absorbe les attaques dans une jauge, puis libère une explosion qui repousse et blesse.', 'Panneaux tout autour : blocage, renvoi, absorption et grande explosion. En équipe : couvre aussi les coéquipiers dans la zone.']];
+
+// ===================== TÉLÉPORTATION : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, T = A.tp;
+  const DUR = 10, RECH = 5, GHOST_LIFE = 4.5, TR = 380;
+  const DIST = { 1: 240, 3: 240, 4: 240, 5: 260 };           // distance d'une téléportation directionnelle
+  const MAXTP = { 1: 1, 2: 1, 3: 3, 4: 3, 5: 5 };           // téléportations par activation
+  const WAVE = { R: 210, dmg: 70, knock: 650, stun: 0.4 };
+  T.cd = function () { return (DUR + RECH) / WB.cdMul('tp'); };
+  T.range = function (L) { return L === 1 ? DIST[1] : TR; };
+  T.type = 'aim';
+  T.desc = 'Fenêtre de 10 s, recharge 5 s. Niv.1 : une téléportation courte. Niv.2 : derrière un adversaire. Niv.3 : 3 téléportations. Niv.4 : images fantômes. Niv.5 : 5 téléportations et onde finale.';
+  T.ai = { max: function () { return TR; }, min: 0, cond: function (f, ab, t, d) { return !f.tp && (f.hurtT > 0 || d < 160); } };
+
+  // ---- vérification d'une destination : jamais dans un mur, l'eau, hors carte ou sur quelqu'un ; jamais en traversant un mur
+  function freeSpot(g, f, x, y) {
+    const w = g.world, r = f.r, TS = WB.TS;
+    if (x < TS + r || y < TS + r || x > WB.WW - TS - r || y > WB.WH - TS - r) return false;
+    if (w.solidAt(x, y) || w.codeAt(x, y) === 2) return false;
+    const o = { x: x, y: y, r: r }; if (w.collide(o, g.walls)) return false;
+    for (const t of g.F) if (t !== f && t.alive && !t.ghost && !(t.st.jump) && Math.hypot(t.x - x, t.y - y) < r + t.r * (t.scale || 1) - 2) return false;
+    return true;
+  }
+  function pathClear(g, f, x, y) {
+    const d = Math.hypot(x - f.x, y - f.y), n = Math.max(1, Math.ceil(d / 12));
+    for (let i = 1; i <= n; i++) {
+      const px = f.x + (x - f.x) * i / n, py = f.y + (y - f.y) * i / n;
+      if (g.world.solidAt(px, py)) return false;
+      for (const w of g.walls) if (Math.abs(px - w.x) < w.w / 2 + 2 && Math.abs(py - w.y) < w.h / 2 + 2) return false;
+    }
+    return true;
+  }
+  function spotDirection(g, f, L, dx, dy, m) {
+    const full = DIST[L] * (m == null ? 1 : Math.max(0.5, Math.min(1, m)));
+    for (let d = full; d >= 50; d -= 16) { const x = f.x + dx * d, y = f.y + dy * d; if (freeSpot(g, f, x, y) && pathClear(g, f, x, y)) return { x: x, y: y }; }
+    return null;
+  }
+  function spotBehind(g, f, t) {
+    const dd = Math.hypot(t.x - f.x, t.y - f.y) || 1, ux = (t.x - f.x) / dd, uy = (t.y - f.y) / dd, rr = (t.r || 16) * (t.scale || 1) + f.r + 12;
+    for (const off of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2]) {
+      const c = Math.cos(off), s = Math.sin(off), vx = ux * c - uy * s, vy = ux * s + uy * c, x = t.x + vx * rr, y = t.y + vy * rr;
+      if (freeSpot(g, f, x, y) && pathClear(g, f, x, y)) return { x: x, y: y };
+    }
+    return null;
+  }
+
+  // ---- fantômes (visuels, sans collision, sans dégâts) ; les bots peuvent les prendre pour cible
+  function addGhost(g, f, x, y) {
+    g.tpGhosts = g.tpGhosts || [];
+    g.tpGhosts.push({ id: 'ghost' + Math.random(), x: x, y: y, r: f.r, scale: f.scale || 1, owner: f, team: f.team, spec: f.spec, fx: f.face.x, fy: f.face.y, life: GHOST_LIFE, T: GHOST_LIFE,
+      alive: true, decoy: true, kind: 'decoy', st: {}, dots: [], thralls: [], hp: 1e9, maxhp: 1e9, vx: 0, vy: 0, kx: 0, ky: 0, want: { x: 0, y: 0 } });
+  }
+  WB.tpBait = function (f, best, sight) {
+    const g = G(); if (!g.tpGhosts || !g.tpGhosts.length || f.kind === 'thrall' || f.kind === 'golem') return null;
+    const bait = f.ai && f.ai.bait; if (bait && bait.alive && bait.life > 0.5 && bait.team !== f.team) return bait;
+    if (f.ai) f.ai.bait = null;
+    for (const gh of g.tpGhosts) { if (!gh.alive || gh.team === f.team || gh.life < 1.2) continue; if (Math.hypot(gh.x - f.x, gh.y - f.y) < sight && Math.random() < 0.5) { f.ai.bait = gh; return gh; } }
+    return null;
+  };
+
+  function fxOut(g, x, y, col) { g.tpFx = g.tpFx || []; g.tpFx.push({ x: x, y: y, t: 0, T: 0.45, out: col }); }
+
+  function endTp(f, why) {
+    const tp = f.tp; if (!tp) return; const g = G(); f.tp = null; if (tp.ab) { tp.ab.cd = RECH; tp.ab.n = 0; }
+    if (why === 'time') g.text(f.x, f.y - 46, 'Faille refermée', '#e0b0ff', 14);
+  }
+
+  function destination(g, f, L, aim) {
+    const bot = f.kind !== 'player';
+    if (L === 2 || (L >= 3 && aim.target)) {
+      const t = aim.target && aim.target.alive ? aim.target : g.nearest(f, TR); if (!t || t.decoy || Math.hypot(t.x - f.x, t.y - f.y) > TR + 40) return null;
+      const s = spotBehind(g, f, t); return s ? { x: s.x, y: s.y, face: t } : null;
+    }
+    let dx = aim.x, dy = aim.y; const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    if (bot) { const e = g.nearest(f, 600); if (e) { const d = Math.hypot(e.x - f.x, e.y - f.y) || 1; if (L === 1 || f.hurtT > 0) { dx = (f.x - e.x) / d; dy = (f.y - e.y) / d; } } }
+    const s = spotDirection(g, f, L, dx, dy, aim.target ? 1 : aim.m); return s;
+  }
+
+  // une téléportation : instantanée, depuis et vers des points vérifiés
+  function doTp(g, f, L, aim) {
+    const d = destination(g, f, L, aim); if (!d) return false;
+    const ox = f.x, oy = f.y;
+    fxOut(g, ox, oy, '#c874ff'); g.tpFx.push({ x: d.x, y: d.y, t: 0, T: 0.5, inn: '#e8c8ff' });
+    g.fx('ring', ox, oy, { r: 46, col: '#c874ff', life: 0.4, w: 5 }); g.fx('burst', ox, oy, { col: '#e0b0ff', n: 14, life: 0.5 });
+    if (L >= 4) addGhost(g, f, ox, oy);
+    f.x = d.x; f.y = d.y; f.vx = f.vy = 0; f.kx = f.ky = 0;
+    if (d.face) { const dd = Math.hypot(d.face.x - f.x, d.face.y - f.y) || 1; f.face.x = (d.face.x - f.x) / dd; f.face.y = (d.face.y - f.y) / dd; f.aimLast = { x: f.face.x, y: f.face.y }; }
+    g.fx('ring', f.x, f.y, { r: 40, col: '#ffffff', life: 0.35, w: 4 }); g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 14, life: 0.5 }); g.sfx('tp');
+    return true;
+  }
+
+  T.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl; if (f.tp) return false;
+    if (!doTp(g, f, L, aim)) return false;
+    const tp = { L: L, ab: ab, age: 0, max: MAXTP[L], used: 1, waveUsed: false };
+    f.tp = tp; ab.cd = DUR + RECH;
+    if (tp.used >= tp.max && L < 5) tp.finish = true;        // la recharge est posée à l'image suivante (le moteur applique la sienne juste après le lancement)
+  };
+
+  // téléportations suivantes dans la fenêtre (niveaux 3 à 5) et onde finale
+  WB.tpNext = function (f, ab, aim) {
+    const g = G(), tp = f.tp; if (!tp || !g.canCast(f) || ab.gap > 0) return false;
+    if (tp.used >= tp.max) return tp.L >= 5 ? WB.tpWave(f) : false;
+    if (!doTp(g, f, tp.L, aim)) { if (f === g.player && WB.ui && WB.ui.showToast) WB.ui.showToast('Destination impossible', '#ffd0a0'); return false; }   // un échec ne consomme rien
+    tp.used++; ab.gap = 0.3;
+    if (tp.used >= tp.max && tp.L < 5) tp.finish = true;
+    return true;
+  };
+
+  WB.tpWave = function (f) {
+    const tp = f.tp; if (!tp || tp.L < 5 || tp.used < 1 || tp.waveUsed) return false; const g = G(); tp.waveUsed = true;
+    g.fx('ring', f.x, f.y, { r: WAVE.R, col: '#c874ff', life: 0.6, w: 10 }); g.fx('ring', f.x, f.y, { r: WAVE.R * 0.6, col: '#ffffff', life: 0.4, w: 6 }); g.fx('burst', f.x, f.y, { col: '#e0b0ff', n: 28, life: 0.8 });
+    g.tpWaves = g.tpWaves || []; g.tpWaves.push({ x: f.x, y: f.y, t: 0 });
+    g.splash(f, f.x, f.y, WAVE.R, WAVE.dmg, 'tp', { knock: WAVE.knock, stun: WAVE.stun }); g.shake(8); g.sfx('boom'); g.text(f.x, f.y - 60, 'ONDE !', '#e8c8ff', 20);
+    endTp(f, 'wave'); return true;
+  };
+
+  WB.updateTp = function (dt) {
+    const g = G(); if (!g) return;
+    for (const f of g.F) {
+      const tp = f.tp; if (!tp) continue;
+      if (!f.alive || f.respawnT > 0) { f.tp = null; continue; }
+      tp.age += dt; const rem = DUR - tp.age; if (tp.ab) tp.ab.cd = Math.max(0.01, rem + RECH);
+      if (tp.finish) { endTp(f, 'done'); continue; }
+      if (rem <= 0) endTp(f, 'time');
+    }
+    if (g.tpGhosts) { for (const gh of g.tpGhosts) { gh.life -= dt; if (gh.life <= 0) gh.alive = false; } g.tpGhosts = g.tpGhosts.filter(function (gh) { return gh.alive; }); }
+    if (g.tpFx) { for (const e of g.tpFx) e.t += dt; g.tpFx = g.tpFx.filter(function (e) { return e.t < e.T; }); }
+    if (g.tpWaves) { for (const w of g.tpWaves) w.t += dt; g.tpWaves = g.tpWaves.filter(function (w) { return w.t < 0.6; }); }
+  };
+
+  WB.drawTp = function (c, g, time) {
+    if (g.tpGhosts) for (const gh of g.tpGhosts) {
+      const a = Math.min(1, gh.life / 1.5) * 0.55; c.save();
+      c.fillStyle = 'rgba(200,116,255,' + (0.18 * a / 0.55) + ')'; c.beginPath(); c.ellipse(gh.x, gh.y + 14, 22, 9, 0, 0, PI2); c.fill();
+      if (WB.drawBlob && gh.spec) WB.drawBlob(c, gh.spec, gh.x, gh.y + Math.sin(time * 3 + gh.x) * 1.5, 1, { t: time, walk: 0, moving: false, fx: gh.fx, fy: gh.fy, alpha: a, flash: false, hurt: false, arm: false, cast: 0, jump: 0 });
+      c.globalAlpha = a; c.strokeStyle = '#d8a8ff'; c.lineWidth = 2; c.setLineDash([4, 5]); c.beginPath(); c.arc(gh.x, gh.y, 28, 0, PI2); c.stroke(); c.setLineDash([]); c.restore();
+    }
+    if (g.tpFx) for (const e of g.tpFx) {
+      const u = e.t / e.T, col = e.out || e.inn; c.save(); c.globalAlpha = 1 - u;
+      const h = 90 * (e.out ? (1 - u) : u < 0.3 ? u / 0.3 : 1 - (u - 0.3) / 0.7), gr = c.createLinearGradient(0, e.y - h, 0, e.y + 20); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, col);
+      c.fillStyle = gr; c.fillRect(e.x - 14 * (e.out ? 1 - u : 1), e.y - h, 28 * (e.out ? 1 - u : 1), h + 20);
+      c.strokeStyle = col; c.lineWidth = 4; c.beginPath(); c.ellipse(e.x, e.y + 14, 14 + 34 * (e.out ? u : 1 - u), 6 + 14 * (e.out ? u : 1 - u), 0, 0, PI2); c.stroke(); c.restore();
+    }
+    if (g.tpWaves) for (const w of g.tpWaves) { const u = w.t / 0.6; c.strokeStyle = 'rgba(210,150,255,' + (1 - u) + ')'; c.lineWidth = 12 * (1 - u) + 2; c.beginPath(); c.arc(w.x, w.y, WAVE.R * u, 0, PI2); c.stroke(); }
+    for (const f of g.F) {
+      const tp = f.tp; if (!tp || !f.alive) continue; const rem = Math.max(0, DUR - tp.age), left = tp.max - tp.used;
+      c.save(); c.translate(f.x, f.y); c.strokeStyle = 'rgba(200,116,255,.55)'; c.lineWidth = 2; c.setLineDash([6, 6]); c.beginPath(); c.arc(0, 0, 34, time * 2, time * 2 + PI2 * Math.max(0.08, rem / DUR)); c.stroke(); c.setLineDash([]);
+      c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(-16, 34, 32, 5); c.fillStyle = rem < 2 ? '#ff8a6a' : '#d8a8ff'; c.fillRect(-15, 35, 30 * (rem / DUR), 3);
+      c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; c.fillStyle = '#ffffff';
+      const lab = (left > 0 ? left + (left > 1 ? ' TP · ' : ' TP · ') : tp.L >= 5 ? 'ONDE · ' : '') + rem.toFixed(1) + ' s'; c.strokeText(lab, 0, 52); c.fillText(lab, 0, 52); c.restore();
+    }
+  };
+  const u2 = WB.updateHands, d2 = WB.drawHands;
+  WB.updateHands = function (dt) { u2(dt); WB.updateTp(dt); };
+  WB.drawHands = function (ctx, g, time) { d2(ctx, g, time); WB.drawTp(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.tp = ['Fruit du dragon', 'Téléportation instantanée, sans jamais traverser un mur. Fenêtre de 10 s, recharge 5 s.', ['Une téléportation courte dans la direction choisie.', 'Tu apparais derrière l\'adversaire visé, face à lui.', 'Trois téléportations successives, une par commande.', 'Chaque téléportation laisse une image fantôme qui trompe les ennemis.', 'Cinq téléportations avec fantômes, puis une onde qui blesse et repousse (à toi de la déclencher).']];
