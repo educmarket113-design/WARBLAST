@@ -102,12 +102,14 @@
       t.st[name] = Math.max(t.st[name] || 0, dur);
     };
     G.knock = function (t, dx, dy, force) { if (!t.alive || (t.st.jump || t.ghost)) return; if (t.kind === 'boss') force *= 0.5; t.kx += dx * force; t.ky += dy * force; };
-    G.burn = function (t, total, dur, src, ab) { if (t.dots.length > 4) t.dots.shift(); t.dots.push({ type: 'taper', total: total, dur: dur, left: dur, src: src, ab: ab, acc: 0 }); };
+    G.burn = function (t, total, dur, src, ab) { if (WB.shieldCovers && WB.shieldCovers(t, src)) return; if (t.dots.length > 4) t.dots.shift(); t.dots.push({ type: 'taper', total: total, dur: dur, left: dur, src: src, ab: ab, acc: 0 }); };
     G.dotFlat = function (t, total, dur, src, ab) { if (t.dots.length > 4) t.dots.shift(); t.dots.push({ type: 'flat', total: total, dur: dur, left: dur, src: src, ab: ab, acc: 0 }); };
     G.damage = function (t, amt, src, ab, opt) {
       opt = opt || {};
+      if (G.srcOverride && src === G.srcOverride.from) { src = G.srcOverride.to; amt *= G.srcOverride.mul || 1; }
       if (!t.alive || amt <= 0) return;
       if (t.st.shield > 0 || t.st.jump || t.st.invuln > 0) return;
+      if (WB.shieldFilter && !opt.noShield) { amt = WB.shieldFilter(t, amt, src, ab, opt); if (amt <= 0) return; }
       if (t.thralls.length && !opt.noRedirect) { const th = t.thralls.find(x => x.alive && (x.thrall || x.kind === 'golem') && dist(x, t) < 560); if (th) { G.fx('burst', th.x, th.y, { col: '#8affc8', n: 4, life: 0.3 }); G.damage(th, amt, src, ab, Object.assign({}, opt, { noRedirect: true })); return; } }
       let s = src; if (s && (s.kind === 'thrall' || s.kind === 'golem') && s.owner) s = s.owner; else if (s && s.thrall && s.thrall.owner) s = s.thrall.owner;
       if (s && s.kind === 'minion' && (t.kind === 'player' || t.kind === 'bot')) amt *= 0.5; else if (s && s.kind === 'boss' && (t.kind === 'player' || t.kind === 'bot')) amt *= 0.7;
@@ -574,11 +576,13 @@
           if (dead) break;
           for (const sp of G.spiders) if (sp.alive && Math.hypot(sp.x - p.x, sp.y - p.y) < sp.r + p.r) { G.hitSpider(sp, 14, p.owner); dead = true; break; }
           if (dead) break;
+          if (WB.shieldProj) { const sr = WB.shieldProj(p); if (sr === 1) { dead = true; break; } }
           for (const t of G.F) {
             if (!t.alive || t.team === p.owner.team || (t.st.jump || t.ghost)) continue;
             if (Math.hypot(t.x - p.x, t.y - p.y) < t.r * t.scale * 0.9 + p.r) {
               if (t.st.shield > 0 || t.st.invuln > 0) { G.fx('burst', p.x, p.y, { col: '#9ad8ff', n: 6, life: 0.3 }); dead = true; break; }
-              const rm = p.onHit ? p.onHit(p, t) : true; if (rm !== false) dead = true; break;
+              WB.__pa = Math.atan2(p.y - t.y, p.x - t.x); if (p.refl) G.srcOverride = p.refl;
+              let rm; try { rm = p.onHit ? p.onHit(p, t) : true; } finally { WB.__pa = null; G.srcOverride = null; } if (rm !== false) dead = true; break;
             }
           }
         }

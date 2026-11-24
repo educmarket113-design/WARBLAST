@@ -997,3 +997,169 @@ WB.GUIDE.hole = ['Prune noire', 'Aspire et élimine les ennemis. 2 utilisations 
   WB.drawHands = function (ctx, g, time) { drw0(ctx, g, time); WB.drawEarth(ctx, g, time); };
 })(window.WB);
 WB.GUIDE.wall = ['Fruit de terre', 'Mur ou terre qui protège et blesse.', ['Un mur droit entre toi et l\'ennemi le plus proche ; l\'ennemi qui fonce dessus est blessé.', 'Mur en demi-cercle plus épais : choc violent et étourdissement.', 'Demi-cercle à épines : détruis les épines, puis le mur.', 'Pluie de météorites sur l\'ennemi le plus proche.', 'Boule de terre automatique puis épines dans toutes les directions.']];
+
+// ===================== BOUCLIER : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, S = A.shield;
+  const DUR = 10, RECH = 5, ZONE = 150, PARRY = 0.4;
+  //  arc : demi-angle du bouclier frontal ; panneaux : nombre, vie d'un panneau, demi-largeur, rayon d'orbite, vitesse
+  const P = {
+    1: { hp: 130, arc: 1.3, R: 46 },
+    2: { panels: 4, php: 60, half: 0.55, R: 46, spin: 2.3 },
+    3: { hp: 180, arc: 1.4, R: 48, mirror: true },
+    4: { hp: 220, arc: 1.4, R: 48, emax: 100, boom: { R: 150, base: 25, k: 0.9, knock: 520, stun: 0 } },
+    5: { panels: 6, php: 90, half: 0.55, R: 56, spin: 1.8, mirror: true, emax: 180, boom: { R: 240, base: 40, k: 1.0, knock: 820, stun: 0.6 } }
+  };
+  const NOBLOCK = { hole: 1, flamme: 1, drown: 1, summon_env: 1 };
+  const REFLECT = { fire: 1, bullet: 1, stone: 1, web: 1 };       // seuls les projectiles de ce type sont renvoyables
+  S.cd = function (L) { return (DUR + RECH) / WB.cdMul('shield'); };
+  S.range = function (L) { const g = G(); return L >= 5 && g && g.mode && g.mode.teams ? ZONE : 60; };
+  S.type = 'zone';
+  S.desc = 'Bouclier de 10 s (recharge 5 s après sa disparition). Niv.1 : frontal. Niv.2 : panneaux rotatifs. Niv.3 : renvoie les projectiles. Niv.4 : absorbe l\'énergie puis explosion. Niv.5 : panneaux tout autour, renvoi, absorption et explosion géante.';
+  S.ai = { max: function () { return 260; }, min: 0, cond: function (f, ab, t, d) { return (f.hp < f.maxhp * 0.75 || f.hurtT > 0) && !f.sh; } };
+
+  const adiff = function (a, b) { let d = a - b; while (d > Math.PI) d -= PI2; while (d < -Math.PI) d += PI2; return d; };
+  const faceAng = function (f) { return Math.atan2(f.face.y, f.face.x); };
+  const panelAng = function (sh, i) { return sh.rot + i * PI2 / sh.panels.length; };
+
+  S.cast = function (f, ab) {
+    const g = G(), L = ab.lvl, p = P[L]; if (f.sh) return false;
+    const sh = { L: L, ab: ab, age: 0, hp: p.hp || 0, maxhp: p.hp || 0, rot: 0, energy: 0, emax: p.emax || 0, panels: null, flash: 0, parry: 0 };
+    if (p.panels) { sh.panels = []; for (let i = 0; i < p.panels; i++) sh.panels.push({ hp: p.php, maxhp: p.php, alive: true, flash: 0 }); }
+    f.sh = sh; ab.cd = DUR + RECH;
+    g.fx('ring', f.x, f.y, { r: 64, col: '#7fd0ff', life: 0.45, w: 6 }); g.fx('burst', f.x, f.y, { col: '#bfe8ff', n: 12, life: 0.5 }); g.sfx('shield');
+  };
+
+  function end(f, why) {
+    const sh = f.sh; if (!sh) return; const g = G(); f.sh = null; if (sh.ab) { sh.ab.cd = RECH; sh.ab.n = 0; }
+    if (why === 'break') { g.fx('burst', f.x, f.y, { col: '#9ad8ff', n: 22, life: 0.7 }); g.fx('ring', f.x, f.y, { r: 60, col: '#ffffff', life: 0.35, w: 4 }); g.text(f.x, f.y - 46, 'Bouclier brisé', '#bfe8ff', 15); g.sfx('impact'); }
+    else if (why === 'time') g.fx('ring', f.x, f.y, { r: 50, col: '#9ad8ff', life: 0.3, w: 3 });
+  }
+  WB.shieldBreak = function (f) { if (f && f.sh) end(f, 'break'); };
+
+  WB.shieldRelease = function (f) {
+    const sh = f.sh; if (!sh || sh.L < 4 || sh.energy < 10) return false; const g = G(), b = P[sh.L].boom, e = sh.energy;
+    const dmg = b.base + e * b.k;
+    g.fx('ring', f.x, f.y, { r: b.R, col: '#ffe27a', life: 0.6, w: 10 }); g.fx('ring', f.x, f.y, { r: b.R * 0.6, col: '#ffffff', life: 0.4, w: 6 }); g.fx('burst', f.x, f.y, { col: '#ffd24a', n: 26, life: 0.8 });
+    g.shw = g.shw || []; g.shw.push({ x: f.x, y: f.y, R: b.R, t: 0 });
+    g.splash(f, f.x, f.y, b.R, dmg, 'shield', { knock: b.knock, stun: b.stun }); g.shake(sh.L >= 5 ? 10 : 6); g.sfx('boom'); g.text(f.x, f.y - 60, 'EXPLOSION !', '#ffe27a', 20);
+    sh.energy = 0; end(f, 'release'); return true;
+  };
+
+  // qui est protégé par quel porteur : le porteur lui-même, et au niveau 5 en équipe ses coéquipiers dans la zone
+  function guardOf(t) {
+    if (t.sh) return t; const g = G(); if (!g || !g.mode || !g.mode.teams) return null;
+    for (const s of g.F) if (s.sh && s.sh.L >= 5 && s.alive && s !== t && s.team === t.team && Math.hypot(s.x - t.x, s.y - t.y) < ZONE) return s;
+    return null;
+  }
+  // un porteur couvre-t-il la direction th (angle depuis le porteur) ?
+  function coverage(s, th) {
+    const sh = s.sh, p = P[sh.L];
+    if (sh.panels) { let best = null, bd = 9; sh.panels.forEach(function (pn, i) { if (!pn.alive) return; const d = Math.abs(adiff(th, panelAng(sh, i))); if (d < p.half && d < bd) { bd = d; best = pn; } }); return best; }
+    return Math.abs(adiff(th, faceAng(s))) <= p.arc ? sh : null;
+  }
+  // encaisse un impact de amt dégâts : renvoie ce qui passe à travers le bouclier
+  function absorb(s, part, amt, th) {
+    const g = G(), sh = s.sh, p = P[sh.L]; let pass = 0, taken = amt;
+    if (sh.panels) {
+      if (sh.L === 2) { pass = Math.max(0, amt - part.hp); taken = Math.min(amt, part.hp); part.hp = 0; }       // niveau 2 : un panneau = un impact
+      else { part.hp -= amt; if (part.hp < 0) { pass = -part.hp; taken = amt - pass; } }
+      part.flash = 0.15; if (part.hp <= 0) { part.alive = false; part.hp = 0; g.fx('burst', s.x + Math.cos(th) * p.R, s.y + Math.sin(th) * p.R, { col: '#9ad8ff', n: 10, life: 0.5 }); }
+    } else { sh.hp -= amt; if (sh.hp < 0) { pass = -sh.hp; taken = amt - pass; sh.hp = 0; } sh.flash = 0.15; }
+    if (sh.emax) sh.energy = Math.min(sh.emax, sh.energy + taken);                                               // absorption limitée par la jauge maximale
+    g.fx('burst', s.x + Math.cos(th) * (p.R + 4), s.y + Math.sin(th) * (p.R + 4), { col: sh.emax ? '#ffe27a' : '#bfe8ff', n: 6, life: 0.3 }); g.sfx('shield');
+    if (sh.panels ? !sh.panels.some(function (q) { return q.alive; }) : sh.hp <= 0) end(s, 'break');
+    return pass;
+  }
+
+  WB.shieldFilter = function (t, amt, src, ab, opt) {
+    const s = guardOf(t); if (!s || !s.alive) return amt;
+    if (opt && opt.dot) return amt;
+    if (!src || src === t || src.team === t.team || NOBLOCK[ab]) return amt;
+    const th = WB.__pa != null ? (WB.__pa) : Math.atan2(src.y - s.y, src.x - s.x);
+    const part = coverage(s, th + (WB.__pa != null && s !== t ? 0 : 0)); if (!part) return amt;
+    return absorb(s, part, amt, th);
+  };
+  WB.shieldCovers = function (t, src) {
+    const s = guardOf(t); if (!s || !src || src === t || src.team === t.team) return false;
+    return !!coverage(s, Math.atan2(src.y - s.y, src.x - s.x));
+  };
+
+  // projectiles : interceptés à l'approche du bouclier, renvoyés si le niveau le permet
+  WB.shieldProj = function (p) {
+    const g = G(); if (!p.owner) return 0;
+    for (const s of g.F) {
+      if (!s.alive || !s.sh) continue; const sh = s.sh, pr = P[sh.L];
+      const prot = [s]; if (sh.L >= 5 && g.mode.teams) for (const a of g.F) if (a !== s && a.alive && a.team === s.team && Math.hypot(a.x - s.x, a.y - s.y) < ZONE) prot.push(a);
+      for (const t of prot) {
+        if (t.team === p.owner.team) continue;
+        const near = t === s ? pr.R + 6 + p.r : t.r + 6 + p.r, d = Math.hypot(p.x - t.x, p.y - t.y); if (d > near) continue;
+        if ((p.dx * (t.x - p.x) + p.dy * (t.y - p.y)) <= 0) continue;
+        const th = Math.atan2(p.y - s.y, p.x - s.x), part = coverage(s, th); if (!part) continue;
+        if (p.pierce) continue;                                                       // lances et attaques spéciales : non interceptées par ce test
+        const old = p.owner;
+        if (pr.mirror && REFLECT[p.kind] && !p.refl) {
+          const par = sh.age < PARRY, mul = par ? 2 : 1;
+          const tgt = old.alive ? old : null, dx = tgt ? tgt.x - p.x : -p.dx, dy = tgt ? tgt.y - p.y : -p.dy, dl = Math.hypot(dx, dy) || 1;
+          p.dx = dx / dl; p.dy = dy / dl; p.owner = s; p.refl = { from: old, to: s, mul: mul }; p.life = Math.max(p.life, 1.0); p.speed *= 1.15;
+          part.hp -= 22; part.flash = 0.15; sh.flash = 0.15; if (part.hp <= 0) { if (sh.panels) { part.alive = false; part.hp = 0; if (!sh.panels.some(function (q) { return q.alive; })) end(s, 'break'); } else end(s, 'break'); }
+          g.fx('ring', p.x, p.y, { r: par ? 46 : 30, col: par ? '#ffe27a' : '#ffffff', life: 0.35, w: 5 }); g.fx('burst', p.x, p.y, { col: par ? '#ffe27a' : '#ffffff', n: par ? 14 : 8, life: 0.4 }); g.text(p.x, p.y - 20, par ? 'PARADE ×2' : 'Renvoyé', par ? '#ffe27a' : '#ffffff', par ? 17 : 14); g.sfx('shield');
+          return 2;
+        }
+        const est = 14 + 6 * (p.lvl || 1), pass = absorb(s, part, est, th);
+        if (pass > 0) g.damage(t, pass, old, p.ab, { noShield: true });
+        return 1;
+      }
+    }
+    return 0;
+  };
+
+  WB.updateShields = function (dt) {
+    const g = G(); if (!g) return;
+    for (const f of g.F) {
+      const sh = f.sh; if (!sh) continue;
+      if (!f.alive || f.respawnT > 0) { f.sh = null; continue; }
+      sh.age += dt; sh.rot += (P[sh.L].spin || 0) * dt; sh.flash = Math.max(0, sh.flash - dt); if (sh.panels) for (const q of sh.panels) q.flash = Math.max(0, q.flash - dt);
+      const rem = DUR - sh.age; if (sh.ab) sh.ab.cd = Math.max(0.01, rem + RECH);
+      if (rem <= 0) { end(f, 'time'); continue; }
+      if (f.kind !== 'player' && sh.L >= 4 && sh.energy >= sh.emax * 0.6 && g.enemiesIn(f, f.x, f.y, P[sh.L].boom.R * 0.8).length) WB.shieldRelease(f);      // les bots déclenchent l'explosion seuls
+    }
+    if (g.shw) { for (const w of g.shw) w.t += dt; g.shw = g.shw.filter(function (w) { return w.t < 0.6; }); }
+  };
+
+  WB.drawShields = function (c, g, time) {
+    for (const f of g.F) {
+      const sh = f.sh; if (!sh || !f.alive) continue; const p = P[sh.L], rem = Math.max(0, DUR - sh.age), low = rem < 2 ? (0.55 + 0.45 * Math.sin(time * 18)) : 1;
+      c.save(); c.translate(f.x, f.y); c.globalAlpha = low;
+      const mir = !!p.mirror, col = sh.emax ? ['#ffe27a', '#fff3b8'] : mir ? ['#e8f4ff', '#ffffff'] : ['#5ab4ff', '#bfe8ff'];
+      if (sh.panels) {
+        if (sh.L >= 5 && g.mode.teams) { c.strokeStyle = 'rgba(180,230,255,.5)'; c.lineWidth = 2; c.setLineDash([10, 8]); c.beginPath(); c.arc(0, 0, ZONE, 0, PI2); c.stroke(); c.setLineDash([]); c.fillStyle = 'rgba(120,200,255,.07)'; c.beginPath(); c.arc(0, 0, ZONE, 0, PI2); c.fill(); }
+        if (sh.L >= 5) { c.strokeStyle = 'rgba(190,235,255,.35)'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, p.R, 0, PI2); c.stroke(); }
+        sh.panels.forEach(function (q, i) {
+          if (!q.alive) return; const a = panelAng(sh, i), hw = sh.L >= 5 ? 0.5 : 0.4;
+          c.strokeStyle = q.flash > 0 ? '#ffffff' : col[1]; c.lineWidth = sh.L >= 5 ? 9 : 7; c.lineCap = 'round'; c.beginPath(); c.arc(0, 0, p.R, a - hw, a + hw); c.stroke();
+          c.strokeStyle = q.flash > 0 ? '#ffffff' : col[0]; c.lineWidth = sh.L >= 5 ? 5 : 3.5; c.beginPath(); c.arc(0, 0, p.R, a - hw, a + hw); c.stroke();
+          const k = q.hp / q.maxhp; c.strokeStyle = 'rgba(255,255,255,' + (0.3 + 0.5 * k) + ')'; c.lineWidth = 1.5; c.beginPath(); c.arc(0, 0, p.R - 7, a - hw * k, a + hw * k); c.stroke();
+        });
+      } else {
+        const a = faceAng(f), hw = p.arc, gr = c.createRadialGradient(0, 0, 10, 0, 0, p.R + 6); gr.addColorStop(0, 'rgba(160,220,255,0)'); gr.addColorStop(1, mir ? 'rgba(235,245,255,.45)' : sh.emax ? 'rgba(255,226,122,.4)' : 'rgba(110,190,255,.4)');
+        c.fillStyle = gr; c.beginPath(); c.moveTo(0, 0); c.arc(0, 0, p.R + 6, a - hw, a + hw); c.closePath(); c.fill();
+        c.lineCap = 'round'; c.strokeStyle = sh.flash > 0 ? '#ffffff' : col[1]; c.lineWidth = 10; c.beginPath(); c.arc(0, 0, p.R, a - hw, a + hw); c.stroke();
+        c.strokeStyle = sh.flash > 0 ? '#ffffff' : col[0]; c.lineWidth = 6; c.beginPath(); c.arc(0, 0, p.R, a - hw, a + hw); c.stroke();
+        if (mir) { c.strokeStyle = 'rgba(255,255,255,.9)'; c.lineWidth = 2; for (let k = 0; k < 3; k++) { const aa = a - hw + ((time * 1.2 + k / 3) % 1) * 2 * hw; c.beginPath(); c.moveTo(Math.cos(aa) * (p.R - 5), Math.sin(aa) * (p.R - 5)); c.lineTo(Math.cos(aa + 0.18) * (p.R + 4), Math.sin(aa + 0.18) * (p.R + 4)); c.stroke(); } }
+        const k = sh.hp / sh.maxhp; c.strokeStyle = 'rgba(255,255,255,.7)'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, p.R - 9, a - hw * k, a + hw * k); c.stroke();
+      }
+      // jauge d'énergie (niveaux 4 et 5) et temps restant
+      if (sh.emax) { const k = sh.energy / sh.emax; c.strokeStyle = 'rgba(0,0,0,.35)'; c.lineWidth = 5; c.beginPath(); c.arc(0, 0, 30, 0, PI2); c.stroke(); c.strokeStyle = k >= 1 ? '#ffffff' : '#ffd24a'; c.lineWidth = 4; c.beginPath(); c.arc(0, 0, 30, -Math.PI / 2, -Math.PI / 2 + PI2 * k); c.stroke(); }
+      c.globalAlpha = 1; c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(-16, 34, 32, 5); c.fillStyle = rem < 2 ? '#ff8a6a' : '#9ad8ff'; c.fillRect(-15, 35, 30 * (rem / DUR), 3);
+      c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; c.fillStyle = '#ffffff'; c.strokeText(rem.toFixed(1) + ' s', 0, 52); c.fillText(rem.toFixed(1) + ' s', 0, 52);
+      c.restore();
+    }
+    if (g.shw) for (const w of g.shw) { const u = w.t / 0.6; c.strokeStyle = 'rgba(255,230,140,' + (1 - u) + ')'; c.lineWidth = 12 * (1 - u) + 2; c.beginPath(); c.arc(w.x, w.y, w.R * u, 0, PI2); c.stroke(); }
+  };
+  const u1 = WB.updateHands, d1 = WB.drawHands;
+  WB.updateHands = function (dt) { u1(dt); WB.updateShields(dt); };
+  WB.drawHands = function (ctx, g, time) { d1(ctx, g, time); WB.drawShields(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.shield = ['Pomme verte', 'Bouclier de 10 s, jamais invincible. Recharge de 5 s après sa disparition.', ['Bouclier frontal : bloque ce qui vient de face, pas le dos ni les côtés.', 'Panneaux rotatifs : chacun bloque un impact.', 'Bouclier miroir : renvoie les projectiles à leur lanceur (parade ×2 dans les 0,4 premières secondes).', 'Absorbe les attaques dans une jauge, puis libère une explosion qui repousse et blesse.', 'Panneaux tout autour : blocage, renvoi, absorption et grande explosion. En équipe : couvre aussi les coéquipiers dans la zone.']];

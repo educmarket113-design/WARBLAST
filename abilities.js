@@ -321,7 +321,7 @@
       else { const px = f.x + aim.x * R * Math.max(aim.m, 0.4), py = f.y + aim.y * R * Math.max(aim.m, 0.4); tg = g.enemiesIn(f, f.x, f.y, R).sort((p, q) => Math.hypot(p.x - px, p.y - py) - Math.hypot(q.x - px, q.y - py)).slice(0, L); }
       if (!tg.length) return false;
       if (L >= 5) g.fx('ring', f.x, f.y, { r: 300, col: '#cfd6e8', life: 0.6, w: 8 });
-      for (const t of tg) { g.status(t, 'silence', 3 + 0.7 * L); t.st.shield = 0; t.st.invis = 0; g.fx('cancel', t.x, t.y, { life: 0.7 }); g.fx('chain', f.x, f.y, { x2: t.x, y2: t.y, life: 0.25 }); }
+      for (const t of tg) { g.status(t, 'silence', 3 + 0.7 * L); t.st.shield = 0; if (WB.shieldBreak) WB.shieldBreak(t); t.st.invis = 0; g.fx('cancel', t.x, t.y, { life: 0.7 }); g.fx('chain', f.x, f.y, { x2: t.x, y2: t.y, life: 0.25 }); }
       g.sfx('zap0');
     },
     ai: { max: L => 330, min: 0, cond: (f, ab, t) => !!t && t.slots.some(Boolean) && !(t.st.silence > 0) }
@@ -337,6 +337,6 @@
     return 'fire';
   };
   // nombre d'utilisations avant recharge : 5 pour toutes les capacités, 2 pour le trou noir
-  WB.maxCharges = ab => (ab && ab.id === 'hole') ? 2 : 5;
+  WB.maxCharges = ab => (ab && ab.id === 'hole') ? 2 : (ab && ab.id === 'shield') ? 1 : 5;
   WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: WB.maxCharges({ id: id }), gap: 0 }; };
 })(window.WB);
