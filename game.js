@@ -277,7 +277,7 @@
       for (const w of G.walls) if (rectDist(w, x, y) < r) hitWall(w, dmg);
     };
     function rectDist(w, x, y) { const dx = Math.max(Math.abs(x - w.x) - w.w / 2, 0), dy = Math.max(Math.abs(y - w.y) - w.h / 2, 0); return Math.hypot(dx, dy); }
-    function hitWall(w, dmg) { w.hp -= dmg; w.flash = 0.1; if (w.hp <= 0) { w.life = 0; G.fx('burst', w.x, w.y, { col: '#b8a48a', n: 14, life: 0.6 }); G.sfx('wall'); } }
+    function hitWall(w, dmg) { if (w.grp && WB.hitWallBlock) return WB.hitWallBlock(w, dmg); w.hp -= dmg; w.flash = 0.1; if (w.hp <= 0) { w.life = 0; G.fx('burst', w.x, w.y, { col: '#b8a48a', n: 14, life: 0.6 }); G.sfx('wall'); } }
     function hitTurret(tu, dmg) { tu.hp -= dmg; tu.flash = 0.1; if (tu.hp <= 0) { tu.life = 0; G.fx('burst', tu.x, tu.y, { col: '#aaa', n: 12, life: 0.5 }); } }
     G.hitSpider = function (s, dmg, src) {
       s.hp -= dmg; G.fx('burst', s.x, s.y, { col: '#8a5ac8', n: 5, life: 0.3 });
@@ -825,6 +825,7 @@
     ctx.fillStyle = '#ff4a5a'; ctx.beginPath(); ctx.arc(11, -3, 2, 0, PI2); ctx.arc(11, 3, 2, 0, PI2); ctx.fill(); ctx.restore();
   }
   function drawWall(ctx, w) {
+    if (w.grp && WB.drawWallBlock) return WB.drawWallBlock(ctx, w);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(w.x - w.w / 2 + 6, w.y - w.h / 2 + 8, w.w, w.h);
     ctx.fillStyle = w.flash > 0 ? '#fff' : '#a89478'; ctx.strokeStyle = '#4a3a28'; ctx.lineWidth = 3; ctx.fillRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h); ctx.strokeRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h);
     ctx.strokeStyle = 'rgba(74,58,40,.7)'; ctx.lineWidth = 2; ctx.beginPath();

@@ -787,3 +787,213 @@ WB.GUIDE.ice = ['Myrtilles givrées', 'Gel, piques de glace et piège.', ['Une z
   WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawBlackHoles(ctx, g, time); };
 })(window.WB);
 WB.GUIDE.hole = ['Prune noire', 'Aspire et élimine les ennemis. 2 utilisations seulement avant recharge.', ['Un petit trou noir absorbe 1 ennemi puis se referme.', 'Plus grand : reste ouvert jusqu\'à avoir absorbé 2 ennemis.', 'Même principe, 3 ennemis à absorber.', 'Même principe, 4 ennemis à absorber.', 'Le trou noir se colle sous toi 4 s et absorbe tout ennemi qui entre dans sa zone.']];
+
+// ===================== MUR (TERRE) : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, M = A.wall;
+  WB.fr = 0;
+  // niveaux 1 à 3 : murs faits de blocs de terre (le moteur gère les murs comme des rectangles)
+  //   [nombre de blocs, taille d'un bloc, rayon de l'arc, vie du mur, vie d'une épine, durée, dégâts de choc, étourdissement]
+  const P = {
+    1: { n: 8, s: 30, R: 0, hp: 90, spike: 0, life: 14, ram: 16, stun: 0 },
+    2: { n: 9, s: 44, R: 115, hp: 280, spike: 0, life: 16, ram: 20, stun: 0.9 },
+    3: { n: 11, s: 48, R: 135, hp: 420, spike: 50, life: 18, ram: 20, stun: 0.9 }
+  };
+  const SPIKE_HIT = 24, GNAW = 8;
+  const MET = { main: { r: 105, dmg: 75, knock: 420, stun: 0.9, T: 1.05 }, small: { r: 62, dmg: 28, knock: 240, stun: 0.3 } };
+  const E5 = { det: 190, R: 235, dmg: 95, knock: 700, stun: 0.6, close: 0.7, seal: 1.15, end: 1.9 };
+  M.cd = function (L) { return L >= 5 ? 16 : L >= 4 ? 10 : 8; };
+  M.range = function (L) { return L >= 5 ? E5.R : L >= 4 ? 340 : 180; };
+  M.type = 'aim';
+  M.desc = 'Niv.1 : un mur droit entre toi et l\'ennemi. Niv.2 : mur en demi-cercle qui étourdit. Niv.3 : demi-cercle à épines (épines d\'abord, mur ensuite). Niv.4 : pluie de météorites. Niv.5 : boule de terre qui se déclenche seule puis hérisse des épines.';
+  M.ai = { max: function (L) { return L >= 4 ? 340 : 260; }, min: 0, cond: function (f, ab) { return ab.lvl < 5; } };
+
+  function enemies(g, f) { return g.F.filter(function (t) { return t.alive && t.team !== f.team && !(t.st.jump || t.ghost) && t.respawnT <= 0 && !t.swallowed; }); }
+  function dirTo(g, f, aim) {
+    const t = g.nearest(f, 520);
+    if (t) { const d = Math.hypot(t.x - f.x, t.y - f.y) || 1; return { x: (t.x - f.x) / d, y: (t.y - f.y) / d, d: d, t: t }; }
+    const a = aim && (aim.x || aim.y) ? aim : (f.aimLast || f.face || { x: 1, y: 0 }); const d = Math.hypot(a.x, a.y) || 1; return { x: a.x / d, y: a.y / d, d: 9999, t: null };
+  }
+  function freeBlock(g, x, y, s) { const w = g.world, h = s / 2 - 2; return !(w.solidAt(x - h, y - h) || w.solidAt(x + h, y - h) || w.solidAt(x - h, y + h) || w.solidAt(x + h, y + h) || w.solidAt(x, y)); }
+
+  function makeWall(g, f, L, aim) {
+    const p = P[L], D = dirTo(g, f, aim), grp = { f: f, L: L, hp: p.hp, maxhp: p.hp, spikes: 0, blocks: [], dead: false, fr: -1, frd: 0, ram: p.ram, stun: p.stun, born: 0 };
+    const pts = [];
+    if (L === 1) {
+      const dd = Math.max(f.r + 26, Math.min(72, D.d / 2)), cx = f.x + D.x * dd, cy = f.y + D.y * dd, px = -D.y, py = D.x;       // ligne perpendiculaire à la direction de l'ennemi
+      for (let k = 0; k < p.n; k++) { const o = (k - (p.n - 1) / 2) * (p.s - 4); pts.push({ x: cx + px * o, y: cy + py * o, ang: Math.atan2(D.y, D.x) }); }
+    } else {
+      const a0 = Math.atan2(D.y, D.x);
+      for (let k = 0; k < p.n; k++) { const a = a0 + (k / (p.n - 1) - 0.5) * Math.PI; pts.push({ x: f.x + Math.cos(a) * p.R, y: f.y + Math.sin(a) * p.R, ang: a }); }      // vrai demi-cercle côté ennemi
+    }
+    for (const q of pts) {
+      if (!freeBlock(g, q.x, q.y, p.s)) continue;
+      const b = { x: q.x, y: q.y, w: p.s, h: p.s, hp: 1e9, maxhp: 1e9, life: p.life, owner: f, grp: grp, ang: q.ang, spike: p.spike, spikeMax: p.spike, idx: grp.blocks.length };
+      if (p.spike) grp.spikes++; grp.blocks.push(b); g.addWall(b);
+    }
+    if (!grp.blocks.length) return false;
+    grp.mid = grp.blocks[Math.floor(grp.blocks.length / 2)];
+    g.mwalls = g.mwalls || []; g.mwalls.push(grp);
+    for (const b of grp.blocks) { g.fx('burst', b.x, b.y, { col: '#8a6a44', n: 4, life: 0.5 }); }
+    g.fx('ring', grp.mid.x, grp.mid.y, { r: 50, col: '#b89868', life: 0.4, w: 5 }); g.sfx('wall'); if (f === g.player) g.shake(2);
+    return true;
+  }
+
+  WB.hitWallBlock = function (w, dmg) {
+    const g = G(), grp = w.grp; if (!grp || grp.dead) return;
+    w.flash = 0.1;
+    if (w.spike > 0) {                                       // étape 1 : les épines ont leur propre résistance
+      w.spike -= dmg; g.fx('burst', w.x, w.y, { col: '#d8c090', n: 3, life: 0.3 });
+      if (w.spike <= 0) { w.spike = 0; grp.spikes--; g.fx('burst', w.x, w.y, { col: '#c8a870', n: 8, life: 0.5 }); g.sfx('wall'); }
+      return;
+    }
+    if (grp.spikes > 0) { g.fx('burst', w.x, w.y, { col: '#999', n: 2, life: 0.2 }); return; }   // le mur est protégé tant qu'il reste une épine
+    if (grp.fr === WB.fr && grp.frd === dmg) return;        // une même explosion qui touche plusieurs blocs ne compte qu'une fois
+    grp.fr = WB.fr; grp.frd = dmg; grp.hp -= dmg;
+    for (const b of grp.blocks) b.flash = 0.1;
+    if (grp.hp <= 0) { grp.dead = true; for (const b of grp.blocks) { b.life = 0; g.fx('burst', b.x, b.y, { col: '#a88a5c', n: 8, life: 0.6 }); } g.sfx('wall'); }
+  };
+
+  // niveau 4 : pluie de météorites sur l'ennemi le plus proche
+  function meteors(g, f, ab) {
+    const t = g.nearest(f, 400); if (!t) return false;
+    g.met = g.met || [];
+    const lx = t.x + (t.vx || 0) * 0.35, ly = t.y + (t.vy || 0) * 0.35;
+    g.met.push({ f: f, x: lx, y: ly, T: MET.main.T, t: 0, big: true, r: MET.main.r });
+    const offs = [[-95, -40, 0.55], [100, -25, 0.7], [-40, 90, 0.85], [70, 85, 1.2]];
+    for (const o of offs) g.met.push({ f: f, x: lx + o[0], y: ly + o[1], T: o[2], t: 0, big: false, r: MET.small.r });
+    g.sfx('wall'); return true;
+  }
+  function impact(g, m) {
+    const c = m.big ? MET.main : MET.small;
+    g.splash(m.f, m.x, m.y, c.r, c.dmg, 'wall', { knock: c.knock, stun: c.stun });
+    g.fx('ring', m.x, m.y, { r: c.r, col: '#ff9a3a', life: 0.5, w: m.big ? 9 : 5 }); g.fx('burst', m.x, m.y, { col: '#7a5a38', n: m.big ? 26 : 12, life: 0.8 }); g.fx('burst', m.x, m.y, { col: '#ffb040', n: m.big ? 14 : 6, life: 0.5 });
+    g.craters = g.craters || []; g.craters.push({ x: m.x, y: m.y, r: c.r * 0.55, t: 0, life: 3.2 });
+    g.earthP = g.earthP || []; for (let k = 0; k < (m.big ? 14 : 6); k++) { const a = Math.random() * PI2, v = 120 + Math.random() * 260; g.earthP.push({ x: m.x, y: m.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 120, z: 0, t: 0, life: 0.7 + Math.random() * 0.4, s: 3 + Math.random() * 5 }); }
+    g.shake(m.big ? 7 : 3); g.sfx('boom');
+  }
+
+  // niveau 5 : bouclier de terre épineux
+  function earthShield(g, f) {
+    if (f.earth) return false;
+    f.earth = { t: 0, burst: false, ang: Math.random() * PI2 }; f.st.invuln = Math.max(f.st.invuln || 0, E5.end); f.st.root = Math.max(f.st.root || 0, E5.seal);
+    g.fx('ring', f.x, f.y, { r: 80, col: '#b89868', life: 0.5, w: 6 }); g.sfx('wall'); return true;
+  }
+
+  M.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl;
+    if (L <= 3) return makeWall(g, f, L, aim);
+    if (L === 4) return meteors(g, f, ab);
+    return earthShield(g, f);
+  };
+
+  WB.updateEarth = function (dt) {
+    const g = G(); if (!g) return; WB.fr++;
+    for (const t of g.F) if (t.__wh > 0) t.__wh -= dt;
+    // murs : collision violente, épines, grignotage
+    if (g.mwalls && g.mwalls.length) {
+      g.mwalls = g.mwalls.filter(function (grp) { return !grp.dead && grp.blocks.some(function (b) { return b.life > 0; }); });
+      for (const grp of g.mwalls) {
+        const foes = enemies(g, grp.f);
+        for (const b of grp.blocks) {
+          if (b.life <= 0) continue;
+          for (const t of foes) {
+            const dx = Math.max(Math.abs(t.x - b.x) - b.w / 2, 0), dy = Math.max(Math.abs(t.y - b.y) - b.h / 2, 0), d = Math.hypot(dx, dy); if (d > t.r + 5) continue;
+            const vx = (t.vx || 0) + (t.kx || 0), vy = (t.vy || 0) + (t.ky || 0), nx = b.x - t.x, ny = b.y - t.y, nl = Math.hypot(nx, ny) || 1, vin = (vx * nx + vy * ny) / nl;
+            if (vin > 70 && !(t.__wh > 0)) {
+              t.__wh = 0.9; g.damage(t, grp.ram + (b.spike > 0 ? SPIKE_HIT : 0), grp.f, 'wall'); if (grp.stun) g.status(t, 'stun', grp.stun);
+              g.knock(t, -nx / nl, -ny / nl, b.spike > 0 ? 260 : 120); g.fx('burst', t.x, t.y, { col: b.spike > 0 ? '#e0d0a0' : '#b89868', n: 8, life: 0.4 }); g.text(t.x, t.y - 34, b.spike > 0 ? 'Épines !' : 'Choc !', '#ffd8a0', 14); g.sfx('wall');
+            } else if (b.spike > 0 && !(t.__wh > 0)) { t.__wh = 0.5; g.damage(t, SPIKE_HIT * 0.6, grp.f, 'wall'); g.knock(t, -nx / nl, -ny / nl, 160); }
+            if (vin > 20) WB.hitWallBlock(b, GNAW * dt);                 // l'ennemi qui pousse use le mur
+          }
+        }
+      }
+    }
+    // météorites
+    if (g.met) { for (const m of g.met) { m.t += dt; if (m.t >= m.T && !m.done) { m.done = true; impact(g, m); } } g.met = g.met.filter(function (m) { return !m.done; }); }
+    if (g.craters) { for (const c of g.craters) c.t += dt; g.craters = g.craters.filter(function (c) { return c.t < c.life; }); }
+    // boule de terre : déclenchement automatique quand un ennemi entre dans le rayon de détection
+    for (const f of g.F) {
+      if (!f.alive || !f.slots) continue;
+      if (f.earth) {
+        const e = f.earth; e.t += dt;
+        if (!e.burst && e.t >= E5.seal) {
+          e.burst = true; const hit = g.enemiesIn(f, f.x, f.y, E5.R);
+          e.spikes = []; const N = 26; for (let k = 0; k < N; k++) e.spikes.push({ a: e.ang + k / N * PI2 + (Math.random() - 0.5) * 0.12, len: E5.R * (0.72 + Math.random() * 0.28), w: 13 + Math.random() * 8 });
+          for (const t of hit) { g.damage(t, E5.dmg, f, 'wall'); g.knock(t, (t.x - f.x) / (Math.hypot(t.x - f.x, t.y - f.y) || 1), (t.y - f.y) / (Math.hypot(t.x - f.x, t.y - f.y) || 1), E5.knock); g.status(t, 'stun', E5.stun); g.fx('burst', t.x, t.y, { col: '#e8d8a8', n: 10, life: 0.5 }); }
+          g.fx('ring', f.x, f.y, { r: E5.R, col: '#d8b878', life: 0.6, w: 10 }); g.fx('burst', f.x, f.y, { col: '#7a5a38', n: 30, life: 0.9 }); g.shake(9); g.sfx('boom'); g.text(f.x, f.y - 70, 'ÉPINES !', '#ffe0a0', 20);
+          g.earthP = g.earthP || []; for (let k = 0; k < 22; k++) { const a = Math.random() * PI2, v = 160 + Math.random() * 300; g.earthP.push({ x: f.x, y: f.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 100, t: 0, life: 0.6 + Math.random() * 0.5, s: 3 + Math.random() * 6 }); }
+        }
+        if (e.t >= E5.end || !f.alive) { f.earth = null; f.earthLock = 6; }
+        continue;
+      }
+      if (f.earthLock > 0) f.earthLock -= dt;
+      if (f.thrall || f.swallowed || !g.started || g.over || f.earthLock > 0) continue;
+      for (let i = 0; i < f.slots.length; i++) {
+        const ab = f.slots[i]; if (!ab || ab.id !== 'wall' || ab.lvl < 5 || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0)) continue;
+        if (!g.canCast(f)) break;
+        if (enemies(g, f).some(function (t) { return Math.hypot(t.x - f.x, t.y - f.y) < E5.det + t.r; })) g.useSlot(f, i, { x: f.face ? f.face.x : 1, y: f.face ? f.face.y : 0, m: 1 });
+        break;
+      }
+    }
+    if (g.earthP) { for (const p of g.earthP) { p.t += dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 520 * dt; } g.earthP = g.earthP.filter(function (p) { return p.t < p.life; }); }
+  };
+
+  // ---------- dessin ----------
+  WB.drawWallBlock = function (c, w) {
+    const grp = w.grp, L = grp.L, x = w.x, y = w.y, h = w.w / 2, flash = w.flash > 0;
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x - h + 5, y - h + 7, w.w, w.h);
+    const base = L === 1 ? ['#a89478', '#7c6a52'] : L === 2 ? ['#9a7448', '#6a4a28'] : ['#7a5a3a', '#4a3220'];
+    const gr = c.createLinearGradient(x - h, y - h, x + h, y + h); gr.addColorStop(0, flash ? '#fff' : base[0]); gr.addColorStop(1, flash ? '#ddd' : base[1]);
+    c.fillStyle = gr; c.strokeStyle = '#33261a'; c.lineWidth = 2.5; c.beginPath(); c.roundRect(x - h, y - h, w.w, w.h, 6); c.fill(); c.stroke();
+    c.strokeStyle = 'rgba(40,28,16,.45)'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(x - h + 5, y - 2); c.lineTo(x + 2, y - h + 6); c.moveTo(x + h - 6, y + 3); c.lineTo(x - 3, y + h - 5); c.stroke();
+    if (w.spike > 0) {                                      // épines tournées vers l'extérieur de l'arc
+      const k = 0.35 + 0.65 * w.spike / w.spikeMax, ca = Math.cos(w.ang), sa = Math.sin(w.ang);
+      c.fillStyle = flash ? '#fff' : '#d8c8a0'; c.strokeStyle = '#33261a'; c.lineWidth = 1.5;
+      for (const o of [-0.55, 0, 0.55]) { const bx = x + ca * h * 0.7 - sa * o * h, by = y + sa * h * 0.7 + ca * o * h, len = 22 * k; c.beginPath(); c.moveTo(bx - sa * 7, by + ca * 7); c.lineTo(bx + ca * len, by + sa * len); c.lineTo(bx + sa * 7, by - ca * 7); c.closePath(); c.fill(); c.stroke(); }
+    }
+    if (w === grp.mid) {
+      const p = Math.max(0, grp.hp / grp.maxhp), bw = 46, by = y - h - 16 - (grp.L >= 3 ? 20 : 0);
+      c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(x - bw / 2, by, bw, 6); c.fillStyle = '#ffd24a'; c.fillRect(x - bw / 2 + 1, by + 1, (bw - 2) * p, 4);
+      if (grp.L >= 3) { let sp = 0, sm = 0; for (const b of grp.blocks) { sp += b.spike; sm += b.spikeMax; } c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(x - bw / 2, by + 8, bw, 6); c.fillStyle = '#e8e0c0'; c.fillRect(x - bw / 2 + 1, by + 9, (bw - 2) * (sm ? sp / sm : 0), 4); }
+    }
+  };
+
+  WB.drawEarth = function (c, g, time) {
+    if (g.craters) for (const k of g.craters) { const a = Math.min(1, (k.life - k.t) / 1.2); c.fillStyle = 'rgba(30,18,10,' + (0.5 * a) + ')'; c.beginPath(); c.ellipse(k.x, k.y, k.r * 1.1, k.r * 0.75, 0, 0, PI2); c.fill(); c.strokeStyle = 'rgba(255,120,30,' + (0.5 * a) + ')'; c.lineWidth = 3; c.stroke(); }
+    if (g.met) for (const m of g.met) {
+      const u = Math.min(1, m.t / m.T), pulse = 0.5 + 0.5 * Math.sin(time * 20);
+      c.save(); c.fillStyle = 'rgba(255,60,20,' + (0.12 + 0.22 * u) + ')'; c.beginPath(); c.arc(m.x, m.y, m.r, 0, PI2); c.fill(); c.strokeStyle = 'rgba(255,140,40,' + (0.5 + 0.4 * pulse) + ')'; c.lineWidth = 3; c.setLineDash([9, 7]); c.beginPath(); c.arc(m.x, m.y, m.r * (1 - 0.25 * u), 0, PI2); c.stroke(); c.setLineDash([]);
+      const hh = (1 - u) * 430, mx = m.x + (1 - u) * 170, my = m.y - hh, rr = m.big ? 34 : 18;
+      c.fillStyle = 'rgba(0,0,0,' + (0.15 + 0.25 * u) + ')'; c.beginPath(); c.ellipse(m.x, m.y, rr * (0.4 + 0.8 * u), rr * 0.3 * (0.4 + 0.8 * u), 0, 0, PI2); c.fill();
+      for (let k = 6; k >= 1; k--) { const tu = k / 6; c.fillStyle = 'rgba(255,' + Math.round(150 - 90 * tu) + ',30,' + (0.5 * (1 - tu)) + ')'; c.beginPath(); c.arc(mx + 170 * 0.0 + tu * 36, my - tu * 86, rr * (1 - 0.5 * tu), 0, PI2); c.fill(); }
+      const gr = c.createRadialGradient(mx - rr * 0.3, my - rr * 0.3, 2, mx, my, rr); gr.addColorStop(0, '#d8a060'); gr.addColorStop(0.55, '#7a4a28'); gr.addColorStop(1, '#2a1608'); c.fillStyle = gr; c.strokeStyle = '#ff8a2a'; c.lineWidth = 2.5; c.beginPath(); c.arc(mx, my, rr, 0, PI2); c.fill(); c.stroke();
+      c.restore();
+    }
+    for (const f of g.F) {
+      const e = f.earth; if (!e || !f.alive) continue;
+      const open = Math.min(1, e.t / E5.close), R = 54, fade = e.t > E5.end - 0.3 ? Math.max(0, (E5.end - e.t) / 0.3) : 1;
+      c.save(); c.translate(f.x, f.y - 4); c.globalAlpha = fade;
+      if (e.burst && e.spikes) {                                    // épines de terre dans toutes les directions
+        const gu = Math.min(1, (e.t - E5.seal) / 0.14);
+        for (const s of e.spikes) { const L = s.len * gu, ca = Math.cos(s.a), sa = Math.sin(s.a), b0 = R * 0.8; c.fillStyle = '#a07a4a'; c.strokeStyle = '#2e2014'; c.lineWidth = 2; c.beginPath(); c.moveTo(ca * b0 - sa * s.w / 2, sa * b0 + ca * s.w / 2); c.lineTo(ca * L, sa * L); c.lineTo(ca * b0 + sa * s.w / 2, sa * b0 - ca * s.w / 2); c.closePath(); c.fill(); c.stroke(); c.fillStyle = 'rgba(255,230,170,.35)'; c.beginPath(); c.moveTo(ca * b0, sa * b0); c.lineTo(ca * L, sa * L); c.lineTo(ca * b0 + sa * s.w / 2, sa * b0 - ca * s.w / 2); c.closePath(); c.fill(); }
+      }
+      if (open < 1) {                                               // des blocs de terre sortent du sol et se referment sur le personnage
+        for (let k = 0; k < 10; k++) { const a = e.ang + k / 10 * PI2, rr = (1 - open) * 96 + R * 0.55, bs = 22 + 8 * open; c.fillStyle = k % 2 ? '#8a6238' : '#6a4a2a'; c.strokeStyle = '#2e2014'; c.lineWidth = 2; c.beginPath(); c.arc(Math.cos(a) * rr, Math.sin(a) * rr * 0.9, bs, 0, PI2); c.fill(); c.stroke(); }
+      } else {
+        const sh = e.burst ? 1 : 1 + 0.03 * Math.sin(time * 40), gr = c.createRadialGradient(-16, -18, 6, 0, 0, R * sh); gr.addColorStop(0, '#b88a56'); gr.addColorStop(0.6, '#7a5230'); gr.addColorStop(1, '#3a2514');
+        c.fillStyle = gr; c.strokeStyle = '#25180e'; c.lineWidth = 3.5; c.beginPath(); c.arc(0, 0, R * sh, 0, PI2); c.fill(); c.stroke();
+        c.strokeStyle = 'rgba(30,18,10,.55)'; c.lineWidth = 2; c.beginPath(); c.arc(0, 0, R * 0.62, 0.4, 2.4); c.moveTo(-R * 0.7, R * 0.2); c.lineTo(-R * 0.1, R * 0.5); c.moveTo(R * 0.5, -R * 0.4); c.lineTo(R * 0.15, -R * 0.1); c.stroke();
+        if (!e.burst) { c.strokeStyle = 'rgba(255,230,160,' + (0.3 + 0.4 * Math.sin(time * 30)) + ')'; c.lineWidth = 3; c.beginPath(); c.arc(0, 0, R + 6, 0, PI2); c.stroke(); }
+      }
+      c.restore();
+    }
+    if (g.earthP) for (const p of g.earthP) { c.globalAlpha = Math.max(0, 1 - p.t / p.life); c.fillStyle = '#8a6238'; c.fillRect(p.x - p.s / 2, p.y - p.s / 2, p.s, p.s); c.globalAlpha = 1; }
+    // rayon de détection du niveau 5, visible seulement par son propriétaire (règle générale des portées)
+  };
+  const upd0 = WB.updateHands, drw0 = WB.drawHands;
+  WB.updateHands = function (dt) { upd0(dt); WB.updateEarth(dt); };
+  WB.drawHands = function (ctx, g, time) { drw0(ctx, g, time); WB.drawEarth(ctx, g, time); };
+})(window.WB);
+WB.GUIDE.wall = ['Fruit de terre', 'Mur ou terre qui protège et blesse.', ['Un mur droit entre toi et l\'ennemi le plus proche ; l\'ennemi qui fonce dessus est blessé.', 'Mur en demi-cercle plus épais : choc violent et étourdissement.', 'Demi-cercle à épines : détruis les épines, puis le mur.', 'Pluie de météorites sur l\'ennemi le plus proche.', 'Boule de terre automatique puis épines dans toutes les directions.']];

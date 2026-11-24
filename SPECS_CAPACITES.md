@@ -89,3 +89,14 @@ Choix d'équilibrage : un seul gel par ennemi et par zone, pas de gel pendant le
 - Niv. 5 : trou de rayon 150 qui suit le lanceur pendant 4 s, absorbe instantanément tout ennemi dans le rayon, anneau de temps visible. Un seul trou niv. 5 à la fois.
 - L'absorption ignore bouclier et invulnérabilité de capacité.
 - Tests : t83 (19/19), régressions t60 40/40, t72 15/15, t70/t74/t79/t81 sans erreur JS. Non testé : téléphone réel, multijoueur.
+
+## MUR (TERRE), niveaux 1 à 5 — en attente de validation
+
+Niveaux 1 à 3 : le mur est formé de blocs de terre (le moteur gère les murs comme des rectangles) qui partagent une même résistance. Le mur n'apparaît jamais au hasard : il est placé selon la direction de l'ennemi le plus proche, ou de la visée s'il n'y en a aucun.
+- Niv. 1 : une ligne droite de 8 blocs perpendiculaire à la direction de l'ennemi, posée entre le joueur et lui (72 px devant le joueur). Résistance 90, durée 14 s. L'ennemi qui fonce dessus subit 16 dégâts de collision (recommence après 0,9 s). Un ennemi qui pousse contre le mur l'use (8 pv/s).
+- Niv. 2 : vrai demi-cercle (9 blocs de 44 px, rayon 115, ±90° côté ennemi). Résistance 280, durée 16 s. Collision : 20 dégâts + étourdissement 0,9 s. Plusieurs ennemis bloqués en même temps.
+- Niv. 3 : demi-cercle de 11 blocs de 48 px, rayon 135, avec épines. Deux résistances distinctes : chaque épine a 50 pv, le mur 420 pv. Tant qu'il reste une épine, le mur ne perd rien ; une fois toutes les épines détruites, le mur encaisse. Contact avec une épine : +24 dégâts, ou 14 sans collision frontale.
+- Niv. 4 : plus de mur. 1 grosse météorite (rayon 105, 75 dégâts, projection, étourdissement 0,9 s) et 4 petites (rayon 62, 28 dégâts) sur l'ennemi le plus proche (position anticipée de 0,35 s). Avertissement au sol, cratères. Sans ennemi à portée, la capacité ne se lance pas. Portée 340.
+- Niv. 5 : se déclenche seule quand un ennemi entre à moins de 190 px (une charge consommée). Des blocs de terre sortent du sol et se referment en 0,7 s sur le personnage (protégé et immobile), puis à 1,15 s 26 épines partent dans toutes les directions : 95 dégâts, projection forte et étourdissement 0,6 s à tous les ennemis dans 235 px. La boule disparaît à 1,9 s. Pas de redéclenchement automatique pendant 6 s ensuite. Recharge 16 s après 5 utilisations.
+- Recharges : niv. 1-3 : 8 s, niv. 4 : 10 s.
+- Tests : t85 (20 vérifications, 3 passages à 20/20, les autres passages perdent 1 à 2 vérifications à cause du joueur qui dérive dans le test) ; régressions t60, t72, t83, t70, t74, t79, t81 sans régression. Non testé : téléphone réel, multijoueur, murs contre un terrain accidenté.
