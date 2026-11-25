@@ -188,7 +188,7 @@
       const ab0 = f.slots[i]; if (ab0 && ab0.id === 'shield' && f.sh && f.sh.L >= 4) { if (WB.shieldRelease(f)) fired++; else U.showToast('Jauge d\'énergie vide', '#ffd0a0'); continue; }
       if (ab0 && ab0.id === 'tp' && f.tp) { if (!(ab0.gap > 0)) { if (G.useSlot(f, i, G.autoAim(f, ab0))) fired++; } continue; }
       const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0) || (ab.id === 'summon' && !ab.form)) continue;
-      let au = G.autoAim(f, ab); if (ab.id === 'tp' && ab.lvl === 1) au = { x: f.face.x, y: f.face.y, m: 1 }; if (!au.target && !NOTARGET_OK[ab.id] && !(ab.id === 'ice' && ab.lvl >= 5) && !(ab.id === 'wall' && ab.lvl >= 5) && !(ab.id === 'tp' && ab.lvl !== 2)) { noTarget = true; continue; }
+      let au = G.autoAim(f, ab); if (ab.id === 'tp' && ab.lvl === 1) au = { x: f.face.x, y: f.face.y, m: 1 }; if (!au.target && !NOTARGET_OK[ab.id] && !(ab.id === 'ice' && ab.lvl >= 5) && !(ab.id === 'wall' && ab.lvl >= 5) && !(ab.id === 'spider' && (ab.lvl >= 5 || f.mount)) && !(ab.id === 'tp' && ab.lvl !== 2)) { noTarget = true; continue; }
       if (G.useSlot(f, i, au)) fired++;
     }
     if (!fired && noTarget) U.showToast('Aucun adversaire à portée', '#ffd0a0');

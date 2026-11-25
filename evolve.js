@@ -85,7 +85,7 @@
     wind: ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un cône de vent.', 'Dégâts et étourdissement plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tornade à 360° autour de toi.']],
     scythe: ['Ananas', 'Fourche du diable noire et violette.', ['Une fourche balaie 120° devant toi.', 'Deux fourches qui se croisent.', 'Grande fourche : dégâts reçus divisés par 2, poison dégressif.', 'Deux grandes fourches toxiques.', 'Fourche à tête de mort : devant puis derrière, poison constant jusqu\'au soin.']],
     invis: ['Raisin fantôme', 'Bombes spéciales illimitées, séparées de tes 10 bombes normales. Les niveaux 1 à 4 sont des actions ponctuelles, le niveau 5 crée un domaine de ténèbres.', ['Frappe invisible : tu apparais derrière l\'ennemi le plus proche et collas une bombe piégée. Elle explose quand il utilise une capacité ou quand un autre ennemi l\'attaque.', 'Attaque furtive multiple : une bombe sur chaque ennemi de la zone, toutes explosent ensemble à la fin.', 'Bombe géante lancée sur le plus gros regroupement d\'ennemis, dégâts selon la distance au centre.', 'Bombe géante et double vie : une copie encaisse les coups à ta place, une seule fois par activation.', 'Domaine des ténèbres : 10 s, recharge 3 s. Les ennemis dans la bulle ne peuvent plus te viser, bombes spéciales renforcées.']],
-    spider: ['Aubergine', 'Lance une toile : l\'ennemi est immobilisé, blessé dans la durée, puis ralenti.', ['Une toile.', 'Immobilisation et poison plus longs.', 'Deux toiles.', 'La toile saute sur un deuxième ennemi proche.', 'Trois toiles qui sautent.']],
+    spider: ['Aubergine', 'Chaque activation lance ta toile et invoque trois petites araignées rouges qui attaquent comme toi. Au niveau 5, tu montes sur une araignée géante.', ['Toile empoisonnée : poison progressif et léger ralentissement.', 'Grosse toile qui enveloppe, immobilise et se resserre.', 'Plusieurs toiles successives sur des adversaires différents.', 'Immense toile de zone qui emprisonne, se resserre puis se déchire.', 'Roi des araignées : araignée géante qui te porte et encaisse les coups. Appuie pour enchaîner toiles, morsures et toile géante.']],
     clown: ['Orange', 'Des clowns explosifs poursuivent les ennemis.', ['Un clown.', 'Deux clowns, explosion plus grande.', 'Trois clowns, l\'explosion étourdit.', 'Quatre clowns, plus rapides.', 'Cinq clowns, confettis géants.']],
     necro: ['Durian piquant', 'Une lance qui traverse les murs. L\'ennemi touché devient ton esclave et prend les coups à ta place.', ['Une lance, un esclave.', 'Jusqu\'à 2 esclaves, portée plus grande.', 'Deux lances.', 'Jusqu\'à 4 esclaves.', 'Trois lances en éventail, jusqu\'à 5 esclaves.']],
     turret: ['Cerises', 'Pose des tourelles qui tirent sur les ennemis proches.', ['Une tourelle.', 'Deux tourelles, tir plus rapide.', 'Trois tourelles.', 'Quatre tourelles, très rapides.', 'Cinq tourelles à tir quasi continu.']],
@@ -97,7 +97,7 @@
   };
 
   // tourbillon, clown, araignée, nécromancien, tourelle, rebond : l\'évolution est dans leur code
-  A.spider.desc = 'Lance une toile. Niv.3 : 2 toiles. Niv.4 : la toile saute à un 2e ennemi. Niv.5 : 3 toiles.';
+  // araignée : réécrite en fin de fichier (spécification officielle)
   A.clown.desc = 'Clowns explosifs (autant que le niveau) qui poursuivent les ennemis. Niv.3 : l\'explosion étourdit. Niv.5 : confettis géants.';
   A.necro.desc = 'Lance de mort qui rend esclave. Niv.3 : 2 lances. Niv.5 : 3 lances en éventail.';
   A.turret.desc = 'Tourelles (autant que le niveau) qui tirent sur les ennemis. Plus le niveau est haut, plus elles tirent vite.';
@@ -1714,4 +1714,254 @@ WB.GUIDE.tp = ['Fruit du dragon', 'Téléportation instantanée, sans jamais tra
   const u3 = WB.updateHands, d3 = WB.drawHands;
   WB.updateHands = function (dt) { u3(dt); WB.updateInvis(dt); };
   WB.drawHands = function (ctx, g, time) { d3(ctx, g, time); WB.drawInvis(ctx, g, time); };
+})(window.WB);
+
+// ===================== ARAIGNÉE : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, S = A.spider;
+  const MOUNT = { dur: 15, rech: 5, scale: 1.45, gap: 1.0, hpMul: 1.6 };
+  const MINI = { n: 3, life: 9, speed: 230, cap: 6, range: 270, k: 0.6 };
+  const P1 = { hit: 4, total: 40, dur: 4, slow: 0.3 };                    // niveau 1 : toile empoisonnée
+  const W2 = { dur: 3, total: 70 };                                       // niveau 2 : capture
+  const P3 = { hit: 10, total: 26, dur: 3, slow: 0.45 };                  // niveau 3 : toiles multiples
+  const Z4 = { r: 150, dur: 4, total: 90, tear: 50 };                     // niveau 4 : prison (zone du personnage)
+  const Z4M = { r: 85, dur: 3.2, total: 90, tear: 50 };                   // niveau 4 : zone d'une petite araignée (k appliqué)
+  const GW = { dur: 2.5, total: 45 }, BITE = 85, GZ = { r: 240, dur: 3.5, total: 90, tear: 40, root: false, slow: 0.55 };
+  const RANGE = { 1: 380, 2: 380, 3: 380, 4: 380, 5: 420 };
+
+  S.type = 'aim';
+  S.range = function (L) { return RANGE[L] || 380; };
+  S.cd = function (L) { return L >= 5 ? (MOUNT.dur + MOUNT.rech) / WB.cdMul('spider') : 6.5 - 0.25 * L; };
+  S.desc = 'Chaque activation : ta toile et trois petites araignées rouges. Niv.1 poison. Niv.2 capture. Niv.3 toiles multiples. Niv.4 prison de toile. Niv.5 : araignée géante que tu montes.';
+  S.ai = { max: function (L) { return L >= 5 ? 420 : 380; }, min: 0 };
+
+  function foe(f, t) { return t && t.alive && t.team !== f.team && !t.st.jump && !t.ghost && !t.decoy && !(t.respawnT > 0) && (t.kind === 'player' || t.kind === 'bot' || t.kind === 'boss' || t.kind === 'minion'); }
+  function foesNear(g, f, x, y, r) { const o = []; for (const t of g.F) if (foe(f, t) && Math.hypot(t.x - x, t.y - y) <= r) o.push(t); return o; }
+  function toast(f, m) { if (f === G().player && WB.ui && WB.ui.showToast) WB.ui.showToast(m, '#ffd0a0'); }
+  function protectedT(t) { return t.st.shield > 0 || t.st.invuln > 0; }
+
+  // ---- toiles : un seul moteur pour poison, enveloppement et zones
+  function addWeb(g, w) { g.webs = g.webs || []; w.T = w.dur; w.left = w.dur; w.acc = 0; g.webs.push(w); return w; }
+  function slowT(t, dur, amt) { t.st.slowT = Math.max(t.st.slowT || 0, dur); t.st.slowMax = Math.max(t.st.slowMax || 0, dur); t.st.slowAmt = Math.max(t.st.slowAmt || 0, amt); }
+  function poison(g, src, t, P, k, by) {
+    if (!foe(src, t)) return false; k = k || 1;
+    by = by || src; for (const w of g.webs || []) if (w.kind === 'poison' && w.t === t && w.by === by) w.left = 0;      // une seule toile empoisonnée par araignée et par cible
+    g.damage(t, P.hit * k, src, 'spider'); if (!t.alive) return true;
+    addWeb(g, { kind: 'poison', src: src, by: by, t: t, dur: P.dur, total: P.total * k, ramp: false }); slowT(t, P.dur, P.slow);
+    g.fx('burst', t.x, t.y, { col: '#7aff9a', n: 8, life: 0.4 }); return true;
+  }
+  function wrap(g, src, t, W, k) {
+    if (!foe(src, t) || (t.webWrap && t.webWrap.left > 0) || protectedT(t)) return false; k = k || 1;
+    const w = addWeb(g, { kind: 'wrap', src: src, t: t, dur: W.dur, total: W.total * k, ramp: true }); t.webWrap = w; g.status(t, 'root', W.dur);
+    g.fx('burst', t.x, t.y, { col: '#f4f0ff', n: 12, life: 0.5 }); g.sfx('web'); return true;
+  }
+  function zone(g, src, x, y, Z, k) {
+    k = k || 1; const caps = []; if (Z.root !== false) for (const t of foesNear(g, src, x, y, Z.r)) if (!protectedT(t)) { caps.push(t); g.status(t, 'root', Z.dur); }
+    g.fx('ring', x, y, { r: Z.r, col: '#f4f0ff', life: 0.5, w: 6 }); g.sfx('web');
+    return addWeb(g, { kind: 'zone', src: src, x: x, y: y, r: Z.r, dur: Z.dur, total: Z.total * k, tear: Z.tear * k, ramp: true, root: Z.root !== false, slow: Z.slow, caps: caps });
+  }
+  function dps(w, el) { return w.ramp ? 2 * w.total / w.dur * Math.min(1, el / w.dur) : w.total / w.dur; }
+  function flush(g, w, t) { if (w.acc >= 2) { g.damage(t, w.acc, w.src, 'spider', { dot: true, noRedirect: true }); w.acc = 0; } }
+  function tickWebs(g, dt) {
+    if (!g.webs) return;
+    g.webs = g.webs.filter(function (w) {
+      w.left -= dt; const el = w.T - w.left;
+      if (w.kind === 'poison' || w.kind === 'wrap') {
+        const t = w.t; if (!t.alive || t.respawnT > 0 || w.left <= 0) { if (w.kind === 'wrap' && t.webWrap === w) t.webWrap = null; if (t.alive && w.acc > 0) w.acc = 0; return false; }
+        w.acc += dps(w, el) * dt; flush(g, w, t); return true;
+      }
+      const list = w.root ? w.caps : foesNear(g, w.src, w.x, w.y, w.r);
+      for (const t of list) { if (!t.alive || t.respawnT > 0) continue; if (!w.root && w.slow) slowT(t, 0.25, w.slow); const a = w.accT = (w.accT || new Map()); a.set(t, (a.get(t) || 0) + dps(w, el) * dt); if (a.get(t) >= 2) { g.damage(t, a.get(t), w.src, 'spider', { dot: true, noRedirect: true }); a.set(t, 0); } }
+      if (w.left <= 0) {                                                  // la toile se déchire : dernière vague
+        g.fx('ring', w.x, w.y, { r: w.r, col: '#ffffff', life: 0.5, w: 10 }); g.fx('burst', w.x, w.y, { col: '#f4f0ff', n: 30, life: 0.8 }); g.sfx('boom'); g.shake(5);
+        for (const t of foesNear(g, w.src, w.x, w.y, w.r)) { g.damage(t, w.tear, w.src, 'spider'); const d = Math.hypot(t.x - w.x, t.y - w.y) || 1; g.knock(t, (t.x - w.x) / d, (t.y - w.y) / d, 260); }
+        return false;
+      }
+      return true;
+    });
+  }
+
+  // ---- projectile de toile (celui du moteur), avec un effet à l'impact
+  function shootWeb(g, f, from, tx, ty, big, onHit) {
+    const dx = tx - from.x, dy = ty - from.y, d = Math.hypot(dx, dy) || 1;
+    g.proj({ x: from.x, y: from.y, dx: dx / d, dy: dy / d, speed: 500, life: Math.max(0.35, d / 500 + 0.25), r: big ? 20 : 13, owner: f, ab: 'spider', lvl: f.slots && 1, kind: 'web', onHit: function (p, t) { onHit(t); return true; } });
+  }
+  function sortedFoes(g, f, x, y, r) { return foesNear(g, f, x, y, r).sort(function (a, b) { return Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y); }); }
+
+  // ---- attaque du personnage (niveaux 1 à 4)
+  function attackOf(g, f, L, aim) {
+    const first = aim && aim.target && foe(f, aim.target) ? aim.target : g.nearest(f, S.range(L));
+    if (L === 1 || L === 2) {
+      if (!first) return false;
+      shootWeb(g, f, f, first.x, first.y, L === 2, function (t) { if (L === 1) poison(g, f, t, P1, 1); else wrap(g, f, t, W2, 1); }); return true;
+    }
+    if (L === 3) {
+      const tg = sortedFoes(g, f, f.x, f.y, S.range(L)); if (!tg.length) return false; const n = Math.max(3, Math.min(4, tg.length));
+      for (let i = 0; i < n; i++) g.later(i * 0.18, function () { if (!f.alive) return; const t = tg[i % tg.length]; if (!foe(f, t)) return; f.armT = 0.25; shootWeb(g, f, f, t.x, t.y, false, function (h) { poison(g, f, h, P3, 1); }); });
+      return true;
+    }
+    if (!first) return false; zone(g, f, first.x, first.y, Z4, 1); return true;
+  }
+
+  // ---- petites araignées rouges (niveaux 1 à 4) : vraies entités avec leur IA
+  function mkMini(g, f, L, i, tot) {
+    const a = i * PI2 / tot + Math.random() * 0.4; let x = f.x + Math.cos(a) * 42, y = f.y + Math.sin(a) * 42; if (g.world.solidAt(x, y)) { x = f.x; y = f.y; }
+    const m = { owner: f, team: f.team, L: L, x: x, y: y, ang: a, life: MINI.life, age: 0, cd: 0.25 + i * 0.2, castT: 0, queue: [], target: null, zoneDone: 0, idx: i, born: 0 };
+    g.minis.push(m); g.fx('burst', x, y, { col: '#ff4a4a', n: 8, life: 0.4 }); g.fx('ring', x, y, { r: 22, col: '#ff4a4a', life: 0.35, w: 3 }); return m;
+  }
+  function summon(g, f, L) {
+    g.minis = g.minis || []; const mine = g.minis.filter(function (m) { return m.owner === f; });
+    while (mine.length + MINI.n > MINI.cap) { const o = mine.shift(); g.minis.splice(g.minis.indexOf(o), 1); g.fx('burst', o.x, o.y, { col: '#ff4a4a', n: 6, life: 0.35 }); }            // pas de cumul au-delà de la limite
+    for (let i = 0; i < MINI.n; i++) mkMini(g, f, L, i, MINI.n);
+  }
+  function pickMini(g, m) {
+    const f = m.owner, L = m.L; let list = sortedFoes(g, f, m.x, m.y, 420);
+    if (L === 2 || L === 4) { const free = list.filter(function (t) { return !(t.webWrap && t.webWrap.left > 0) && !(g.webs || []).some(function (w) { return w.kind === 'zone' && w.caps && w.caps.indexOf(t) >= 0; }); }); if (free.length) list = free; }
+    return list;
+  }
+  function miniShoot(g, m, t) {
+    const f = m.owner, L = m.L, k = MINI.k; m.castT = 0.3; m.ang = Math.atan2(t.y - m.y, t.x - m.x);
+    shootWeb(g, f, m, t.x, t.y, L === 2, function (h) { if (L === 1) poison(g, f, h, P1, k, m); else if (L === 2) wrap(g, f, h, W2, k); else poison(g, f, h, P3, k, m); });
+  }
+  function updateMinis(g, dt) {
+    if (!g.minis) return;
+    g.minis = g.minis.filter(function (m) {
+      const f = m.owner; m.age += dt; m.life -= dt; m.castT = Math.max(0, m.castT - dt); m.cd -= dt; m.born = Math.min(1, m.age / 0.3);
+      if (m.life <= 0 || !f.alive || f.respawnT > 0) { g.fx('burst', m.x, m.y, { col: '#ff4a4a', n: 6, life: 0.35 }); return false; }
+      for (const q of m.queue) q.t -= dt;
+      while (m.queue.length && m.queue[0].t <= 0) { const q = m.queue.shift(); if (foe(f, q.target)) miniShoot(g, m, q.target); }
+      const list = pickMini(g, m); const t = list[0]; m.target = t || null;
+      let gx = f.x, gy = f.y, stop = 90;
+      if (t) { gx = t.x; gy = t.y; stop = m.L === 4 ? 70 : 150; }
+      const dx = gx - m.x, dy = gy - m.y, d = Math.hypot(dx, dy) || 1;
+      if (d > stop) { const sp = MINI.speed * dt, nx = m.x + dx / d * sp, ny = m.y + dy / d * sp; if (!g.world.solidAt(nx, ny)) { m.x = nx; m.y = ny; } else if (!g.world.solidAt(nx, m.y)) m.x = nx; else if (!g.world.solidAt(m.x, ny)) m.y = ny; m.ang = Math.atan2(dy, dx); m.moving = true; } else m.moving = false;
+      if (t && m.cd <= 0 && !m.queue.length) {
+        if (m.L === 4) { if (d < 130 && m.zoneDone < 2) { zone(g, f, m.x, m.y, Z4M, MINI.k); m.zoneDone++; m.cd = 4; m.castT = 0.5; } }
+        else if (d < MINI.range) {
+          if (m.L === 3) { const tg = list.slice(0, 3); tg.forEach(function (h, i) { m.queue.push({ t: 0.22 * i, target: h }); }); m.cd = 3.2; }
+          else { miniShoot(g, m, t); m.cd = m.L === 2 ? 3 : 1.6; }
+        }
+      }
+      return true;
+    });
+  }
+
+  // ---- niveau 5 : araignée géante montée
+  function freeSpot(g, f, x, y) {
+    const TS = WB.TS, r = f.r * (f.scale || 1); if (x < TS + r || y < TS + r || x > WB.WW - TS - r || y > WB.WH - TS - r) return false;
+    if (g.world.solidAt(x, y) || g.world.codeAt(x, y) === 2) return false; if (g.world.collide({ x: x, y: y, r: r }, g.walls)) return false;
+    for (const t of g.F) if (t !== f && t.alive && !t.ghost && !t.st.jump && Math.hypot(t.x - x, t.y - y) < r + t.r * (t.scale || 1) - 2) return false; return true;
+  }
+  function mountUp(g, f, ab) {
+    if (f.mount) return false;
+    f.mount = { hp: Math.round(f.maxhp * MOUNT.hpMul), max: Math.round(f.maxhp * MOUNT.hpMul), t: 0, ab: ab, next: 0, cd: 0.4, scale0: f.scale || 1, flash: 0 };
+    f.scale = MOUNT.scale; g.fx('ring', f.x, f.y, { r: 90, col: '#ff4a4a', life: 0.6, w: 10 }); g.fx('burst', f.x, f.y, { col: '#7a2a3a', n: 26, life: 0.8 }); g.text(f.x, f.y - 70, 'ROI DES ARAIGNÉES', '#ff8a8a', 16); g.shake(6); g.sfx('boom'); return true;
+  }
+  function dismount(g, f, why) {
+    const m = f.mount; if (!m) return; f.mount = null; f.scale = m.scale0;
+    if (m.ab) { m.ab.cd = MOUNT.rech; m.ab.n = 0; }
+    if (f.alive) { g.fx('burst', f.x, f.y, { col: '#7a2a3a', n: 24, life: 0.8 }); g.fx('ring', f.x, f.y, { r: 70, col: '#ff8a8a', life: 0.5, w: 8 }); g.text(f.x, f.y - 56, why === 'dead' ? 'Araignée détruite' : 'Araignée disparue', '#ff8a8a', 15); if (why === 'dead') f.st.invuln = Math.max(f.st.invuln || 0, 0.4); }
+  }
+  function trapped(g, f, t) { return (t.webWrap && t.webWrap.left > 0) || (g.webs || []).some(function (w) { return (w.kind === 'zone' && w.caps && w.caps.indexOf(t) >= 0 && w.left > 0) || (w.kind === 'poison' && w.t === t); }); }
+  function doCmd(g, f, cmd) {
+    const m = f.mount;
+    if (cmd === 0) {                                                        // toiles multiples
+      const tg = sortedFoes(g, f, f.x, f.y, S.range(5)).filter(function (t) { return !(t.webWrap && t.webWrap.left > 0); }).slice(0, 5); if (!tg.length) return false;
+      tg.forEach(function (t, i) { g.later(i * 0.12, function () { if (!f.alive || !foe(f, t)) return; f.armT = 0.25; shootWeb(g, f, f, t.x, t.y, true, function (h) { wrap(g, f, h, GW, 1); }); }); });
+    } else if (cmd === 1) {                                                 // morsures sur les emprisonnés
+      let tg = sortedFoes(g, f, f.x, f.y, 520).filter(function (t) { return trapped(g, f, t); }).slice(0, 3);
+      if (!tg.length) tg = sortedFoes(g, f, f.x, f.y, 400).slice(0, 1); if (!tg.length) return false;
+      tg.forEach(function (t, i) { g.later(i * 0.32, function () {
+        if (!f.alive || !f.mount || !foe(f, t)) return; const d = Math.hypot(t.x - f.x, t.y - f.y) || 1, ux = (t.x - f.x) / d, uy = (t.y - f.y) / d, rr = (t.r * (t.scale || 1)) + f.r * f.scale + 8;
+        for (const off of [0, 0.5, -0.5, 1, -1]) { const c = Math.cos(off), s = Math.sin(off), x = t.x - (ux * c - uy * s) * rr, y = t.y - (ux * s + uy * c) * rr; if (freeSpot(g, f, x, y)) { g.fx('ring', f.x, f.y, { r: 40, col: '#ff4a4a', life: 0.3, w: 4 }); f.x = x; f.y = y; f.vx = f.vy = 0; break; } }
+        f.face.x = ux; f.face.y = uy; f.armT = 0.4; m.bite = 0.35; g.fx('burst', t.x, t.y, { col: '#ff4a4a', n: 14, life: 0.5 }); g.fx('ring', t.x, t.y, { r: 34, col: '#ffffff', life: 0.25, w: 5 });
+        g.damage(t, BITE * (trapped(g, f, t) ? 1.25 : 1), f, 'spider'); g.knock(t, ux, uy, 140); g.sfx('impact'); g.shake(4); }); });
+    } else {                                                                // toile géante
+      if (!foesNear(g, f, f.x, f.y, GZ.r + 60).length) return false;
+      zone(g, f, f.x, f.y, GZ, 1); g.text(f.x, f.y - 66, 'TOILE GÉANTE', '#f4f0ff', 16); g.shake(5);
+    }
+    return true;
+  }
+  // les trois attaques s'enchaînent dans l'ordre ; si la prochaine est impossible (pas de cible utile), on passe à la suivante
+  function mountAttack(g, f, ab, aim) {
+    const m = f.mount; if (m.cd > 0) return false;
+    for (let k = 0; k < 3; k++) { const cmd = (m.next + k) % 3; if (doCmd(g, f, cmd)) { m.next = (cmd + 1) % 3; m.cd = MOUNT.gap; m.label = ['TOILES', 'MORSURES', 'TOILE GÉANTE'][cmd]; m.labelT = 1.2; return true; } }
+    toast(f, 'Aucun adversaire à portée'); return false;
+  }
+
+  S.cast = function (f, ab, aim) {
+    const g = G(), L = ab.lvl;
+    if (L >= 5) { if (f.mount) return mountAttack(g, f, ab, aim); return mountUp(g, f, ab); }
+    if (!attackOf(g, f, L, aim)) { toast(f, 'Aucun adversaire à portée'); return false; }
+    summon(g, f, L); f.armT = 0.35; return true;
+  };
+
+  function install(g) {
+    if (g.__spInstalled) return; g.__spInstalled = true; const d1 = g.damage;
+    g.damage = function (t, amt, src, ab, opt) {                            // protection : tout ce qui vise le monté va à l'araignée
+      const m = t.mount;
+      if (m && m.hp > 0 && t.alive && amt > 0 && !(t.st.shield > 0 || t.st.jump || t.st.invuln > 0)) {
+        const dv = t.dv; t.dv = null; const real = t.hp; t.hp = real + 1e6;
+        try { d1.call(g, t, amt, src, ab, opt); } finally { const lost = real + 1e6 - t.hp; t.hp = real; t.dv = dv; m.hp -= lost; m.flash = 0.12; }
+        if (m.hp <= 0 && t.mount === m) dismount(g, t, 'dead'); return;
+      }
+      return d1.call(g, t, amt, src, ab, opt);
+    };
+  }
+
+  WB.updateSpider = function (dt) {
+    const g = G(); if (!g || !g.F) return; install(g);
+    for (const f of g.F) {
+      const m = f.mount; if (!m) continue;
+      if (!f.alive || f.respawnT > 0) { f.mount = null; f.scale = m.scale0; continue; }
+      m.t += dt; m.cd -= dt; m.flash = Math.max(0, (m.flash || 0) - dt); m.bite = Math.max(0, (m.bite || 0) - dt); m.labelT = Math.max(0, (m.labelT || 0) - dt);
+      if (m.ab) { m.ab.cd = 0; m.ab.n = 5; }                              // les commandes de l'araignée restent disponibles pendant toute la montée
+      if (m.t >= MOUNT.dur) dismount(g, f, 'time');
+    }
+    updateMinis(g, dt); tickWebs(g, dt);
+  };
+
+  // ---- dessin
+  function leg(c, ang, len, ph, w) { const a = ang + Math.sin(ph) * 0.35, k1x = Math.cos(a) * len * 0.55, k1y = Math.sin(a) * len * 0.55 - 6; c.beginPath(); c.moveTo(0, 0); c.lineTo(k1x, k1y); c.lineTo(Math.cos(a + 0.35) * len, Math.sin(a + 0.35) * len); c.lineWidth = w; c.stroke(); }
+  WB.drawMount = function (c, f, time) {
+    const m = f.mount; if (!m) return; const fx = f.face.x, fy = f.face.y, ang = Math.atan2(fy, fx), mv = Math.hypot(f.vx || 0, f.vy || 0) > 25, ph = time * (mv ? 16 : 3);
+    c.save(); c.translate(f.x, f.y); c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(0, 12, 66, 26, 0, 0, PI2); c.fill();
+    c.rotate(ang); c.strokeStyle = m.flash > 0 ? '#ffffff' : '#2a0e18'; c.lineCap = 'round';
+    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) leg(c, sd * (0.5 + i * 0.5) + (sd < 0 ? 0 : 0), 62, ph + i * 1.7 + (sd < 0 ? 0 : 3), 6);
+    c.fillStyle = m.flash > 0 ? '#ffb0b0' : '#6a1426'; c.beginPath(); c.ellipse(-26, 0, 34, 28, 0, 0, PI2); c.fill(); c.fillStyle = 'rgba(255,60,60,.5)'; c.beginPath(); c.ellipse(-30, 0, 14, 10, 0, 0, PI2); c.fill();
+    c.fillStyle = m.flash > 0 ? '#ffd0d0' : '#8a1e34'; c.beginPath(); c.ellipse(14, 0, 26, 22, 0, 0, PI2); c.fill();
+    c.fillStyle = '#ffe27a'; for (const e of [-9, -3, 3, 9]) { c.beginPath(); c.arc(32, e, 2.6, 0, PI2); c.fill(); }
+    c.fillStyle = '#fff'; c.beginPath(); c.moveTo(38, -4); c.lineTo(46, -1); c.lineTo(38, 0); c.moveTo(38, 4); c.lineTo(46, 1); c.lineTo(38, 0); c.fill(); c.restore();
+    const p = Math.max(0, m.hp / m.max), rem = Math.max(0, MOUNT.dur - m.t); c.save(); c.translate(f.x, f.y - 74);
+    c.fillStyle = 'rgba(0,0,0,.6)'; c.fillRect(-34, 0, 68, 8); c.fillStyle = p > 0.5 ? '#ff6a5a' : p > 0.25 ? '#ffb04a' : '#ffe04a'; c.fillRect(-33, 1, 66 * p, 6);
+    c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.75)'; c.fillStyle = '#fff'; const lab = 'ARAIGNÉE ' + Math.ceil(m.hp) + ' · ' + rem.toFixed(0) + ' s'; c.strokeText(lab, 0, -3); c.fillText(lab, 0, -3);
+    if (m.labelT > 0) { c.font = 'bold 12px sans-serif'; c.strokeText(m.label, 0, -16); c.fillText(m.label, 0, -16); } c.restore();
+  };
+  function drawMini(c, m, time) {
+    const s = 0.4 + 0.6 * m.born; c.save(); c.translate(m.x, m.y); c.scale(s, s); c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(0, 7, 12, 5, 0, 0, PI2); c.fill(); c.rotate(m.ang);
+    c.strokeStyle = '#3a0a10'; c.lineCap = 'round'; const ph = time * (m.moving ? 22 : 4) + m.idx;
+    for (let i = 0; i < 4; i++) for (const sd of [-1, 1]) leg(c, sd * (0.6 + i * 0.5), 15, ph + i * 1.7 + (sd < 0 ? 0 : 3), 2);
+    const pulse = m.castT > 0 ? 1 + 0.25 * Math.sin(m.castT * 40) : 1;
+    c.fillStyle = '#d02a3a'; c.beginPath(); c.ellipse(-5, 0, 9 * pulse, 7 * pulse, 0, 0, PI2); c.fill(); c.fillStyle = '#a01426'; c.beginPath(); c.arc(6, 0, 5.5, 0, PI2); c.fill();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(9, -2.2, 1.6, 0, PI2); c.arc(9, 2.2, 1.6, 0, PI2); c.fill(); c.restore();
+    if (m.castT > 0 && m.target) { c.strokeStyle = 'rgba(255,255,255,' + m.castT * 2 + ')'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(m.x, m.y); c.lineTo(m.x + (m.target.x - m.x) * 0.4, m.y + (m.target.y - m.y) * 0.4); c.stroke(); }
+  }
+  function web(c, x, y, r, spokes, rings, col, a, rot) {
+    c.save(); c.translate(x, y); c.rotate(rot || 0); c.strokeStyle = col; c.globalAlpha = a; c.lineWidth = 1.6;
+    for (let i = 0; i < spokes; i++) { const an = i * PI2 / spokes; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(an) * r, Math.sin(an) * r); c.stroke(); }
+    for (let k = 1; k <= rings; k++) { const rr = r * k / rings; c.beginPath(); for (let i = 0; i <= spokes; i++) { const an = i * PI2 / spokes, rj = rr * (i % 2 ? 0.93 : 1); const px = Math.cos(an) * rj, py = Math.sin(an) * rj; if (i) c.lineTo(px, py); else c.moveTo(px, py); } c.stroke(); }
+    c.restore();
+  }
+  WB.drawSpider = function (c, g, time) {
+    if (g.webs) for (const w of g.webs) {
+      const u = 1 - w.left / w.T;
+      if (w.kind === 'zone') { const r = w.r * (1 - 0.2 * u); c.save(); c.fillStyle = 'rgba(240,236,255,' + 0.12 + ')'; c.beginPath(); c.arc(w.x, w.y, r, 0, PI2); c.fill(); c.restore(); web(c, w.x, w.y, r, 14, 5, '#f4f0ff', 0.85, 0); }
+      else if (w.t && w.t.alive) { const R = (w.t.r || 20) * (w.t.scale || 1); if (w.kind === 'wrap') { const r = R * (2.1 - 1.0 * u); c.save(); c.fillStyle = 'rgba(240,236,255,0.22)'; c.beginPath(); c.arc(w.t.x, w.t.y, r, 0, PI2); c.fill(); c.restore(); web(c, w.t.x, w.t.y, r, 10, 3, '#ffffff', 0.9, time * 0.3); } else web(c, w.t.x, w.t.y, R * 1.35, 8, 2, '#8aff9a', 0.7, -time * 0.6); }
+    }
+    if (g.minis) for (const m of g.minis) drawMini(c, m, time);
+  };
+  const u4 = WB.updateHands, d4 = WB.drawHands;
+  WB.updateHands = function (dt) { u4(dt); WB.updateSpider(dt); };
+  WB.drawHands = function (ctx, g, time) { d4(ctx, g, time); WB.drawSpider(ctx, g, time); };
 })(window.WB);

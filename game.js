@@ -762,6 +762,7 @@
     if (st.invis > 0) alpha = (f.team === me.team) ? 0.35 : 0.05;
     if (st.invuln > 0 && Math.floor(time * 12) % 2) alpha *= 0.5;
     const R = f.r * f.scale, jh = f.jumpH || 0;
+    if (f.mount && WB.drawMount) WB.drawMount(ctx, f, time);
     // anneau d'équipe
     if (f.kind === 'player' || f.kind === 'bot' || f.kind === 'thrall') {
       const tc = G.mode.teams ? WB.TEAM_COLORS[f.team] : (f === me ? '#ffd24a' : null);
