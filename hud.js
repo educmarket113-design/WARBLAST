@@ -79,7 +79,7 @@
     const G = WB.G, f = G.player; if (!G.started || G.over || f.thrall) return;
     let a = aim; if (!a && lastType !== 'mouse') { const t = G.nearest(f, 400); if (t) { const d = Math.hypot(t.x - f.x, t.y - f.y) || 1; a = { x: (t.x - f.x) / d, y: (t.y - f.y) / d, m: clamp(d / 400, 0.2, 1) }; } }
     if (!a) a = I.aim.active ? { x: I.aim.x, y: I.aim.y, m: Math.max(0.3, I.aim.m) } : { x: f.aimLast.x, y: f.aimLast.y, m: 0.65 };
-    if (!G.throwBomb(f, a)) { if (f.bombs <= 0) U.showToast('Plus de bombes', '#ffb0b0'); }
+    if (!G.throwBomb(f, a)) { if (f.bombs <= 0 && !f.dome) U.showToast('Plus de bombes', '#ffb0b0'); }
   }
 
 
@@ -234,7 +234,7 @@
     if (I.aim.active && I.aim.m > 0.08) {
       const L = 40 + I.aim.m * 360, ax = f.x + I.aim.x * L, ay = f.y + I.aim.y * L;
       ctx.save(); ctx.strokeStyle = 'rgba(255,230,120,.85)'; ctx.lineWidth = 4; ctx.setLineDash([2, 12]); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(f.x + I.aim.x * 30, f.y + I.aim.y * 30); ctx.lineTo(ax, ay); ctx.stroke(); ctx.setLineDash([]);
-      if (f.bombs > 0) { ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffb84a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(f.x + I.aim.x * clamp(I.aim.m * 400, 90, 400), f.y + I.aim.y * clamp(I.aim.m * 400, 90, 400), 74, 0, PI2); ctx.stroke(); }
+      if (f.bombs > 0 || f.dome) { ctx.globalAlpha = 0.5; ctx.strokeStyle = '#ffb84a'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(f.x + I.aim.x * clamp(I.aim.m * 400, 90, 400), f.y + I.aim.y * clamp(I.aim.m * 400, 90, 400), f.dome ? 95 : 74, 0, PI2); ctx.stroke(); }
       ctx.restore();
     }
   };
@@ -285,8 +285,8 @@
     WB.drawIcon(ctx, 'heart', 78, 27, 22); const p = clamp(f.hp / f.maxhp, 0, 1);
     ctx.fillStyle = 'rgba(0,0,0,.55)'; U.rr(ctx, 92, 19, 150, 15, 7); ctx.fill(); ctx.fillStyle = p > 0.6 ? '#46d160' : p > 0.3 ? '#f5c542' : '#ff4a4a'; if (p > 0) { U.rr(ctx, 92, 19, Math.max(10, 150 * p), 15, 7); ctx.fill(); }
     text(Math.ceil(f.hp) + '', 167, 27, 12, '#fff', 'center', 3); text('Niv' + f.level, 258, 27, 12, '#ffd24a', 'center', 3);
-    for (let i = 0; i < 5; i++) { ctx.globalAlpha = i < f.bombs ? 1 : 0.22; WB.drawIcon(ctx, 'bomb', 78 + i * 20, 49, 18); } ctx.globalAlpha = 1;
-    WB.drawIcon(ctx, 'coin', 190, 49, 15); text(String(G.coinsGot), 202, 50, 14, '#ffe27a', 'left', 3);
+    for (let i = 0; i < 10; i++) { ctx.globalAlpha = i < f.bombs ? 1 : 0.22; WB.drawIcon(ctx, 'bomb', 76 + i * 12.5, 49, 14); } ctx.globalAlpha = 1;
+    WB.drawIcon(ctx, 'coin', 216, 49, 15); text(String(G.coinsGot), 228, 50, 14, '#ffe27a', 'left', 3);
     // temps et scores
     const tl = Math.max(0, Math.ceil(G.timeLeft)), mmn = Math.floor(tl / 60), ss = tl % 60;
     panel(W / 2 - 42, 8, 84, 32, { r: 16 }); text(mmn + ':' + (ss < 10 ? '0' : '') + ss, W / 2, 25, 20, tl <= 20 ? '#ff7a7a' : '#fff', 'center', 3);
@@ -399,7 +399,7 @@
     if (dr && dr.moved && f.slots[dr.i]) drawAbilityDisc(ctx, f, f.slots[dr.i], dr.x, dr.y, sw / 2 + 4, { time: time, drag: true });
     // bombe
     const bx = A0.x - R - 14 - bs, by = H - M - bs;
-    btn(bx, by, bs, bs, { style: f.bombs > 0 ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 36); text('x' + f.bombs, cx + 18, cy + 20, 15, '#fff', 'center', 4); } });
+    btn(bx, by, bs, bs, { style: (f.bombs > 0 || f.dome) ? 'red' : 'gray', instant: true, fn: function () { throwBomb(); }, draw: function (cx, cy) { WB.drawIcon(ctx, 'bomb', cx, cy - 4, 36); text(f.dome ? 'x\u221e' : 'x' + f.bombs, cx + 18, cy + 20, 15, '#fff', 'center', 4); } });
     // joysticks
     if (WB.input.touch || lastType === 'touch') {
       const hint = !sticks.move && G.t < 14 ? 0.5 : 0;

@@ -69,14 +69,7 @@
   });
   A.dash.desc = 'Fonce en ligne droite. Niv.3 : traînée qui blesse. Niv.4 : elle ralentit. Niv.5 : onde de choc à l\'arrivée.';
 
-  // invisibilité : niv.3 fumée qui réduit au silence, niv.4 esquive, niv.5 nova d\'ombre
-  wrapPost('invis', function (f, ab) {
-    const g = G(), L = ab.lvl;
-    if (L >= 3) { g.fx('ring', f.x, f.y, { r: 150, col: '#6a6f9a', life: 0.6, w: 10 }); for (const t of g.enemiesIn(f, f.x, f.y, 150)) g.status(t, 'silence', 1.2); }
-    if (L >= 4) f.st.invuln = Math.max(f.st.invuln || 0, 0.8);
-    if (L >= 5) { g.fx('ring', f.x, f.y, { r: 230, col: '#2a2e50', life: 0.6, w: 14 }); g.splash(f, f.x, f.y, 230, 35, 'invis', { knock: 350 }); for (const t of g.enemiesIn(f, f.x, f.y, 230)) g.status(t, 'silence', 2); }
-  });
-  A.invis.desc = 'Deviens invisible, les ennemis touchés sont blessés. Niv.3 : fumée qui réduit au silence. Niv.4 : esquive de 0,8 s. Niv.5 : nova d\'ombre.';
+  // invisibilité : réécrite en fin de fichier (spécification officielle)
 
 
   // Guide des pouvoirs affiché dans les réglages : fruit, et ce que fait chaque niveau (écrit d'après le code des capacités)
@@ -91,7 +84,7 @@
     water: ['Pastèque', 'Repousse et réduit au silence : les ennemis ne peuvent plus utiliser de capacités. Dans l\'eau, ils meurent.', ['Un cône d\'eau.', 'Dégâts et silence plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tempête à 360° autour de toi.']],
     wind: ['Poire', 'Repousse et étourdit, mais les ennemis gardent leurs capacités.', ['Un cône de vent.', 'Dégâts et étourdissement plus longs.', 'Deux vagues.', 'Cône très large, trois vagues.', 'Tornade à 360° autour de toi.']],
     scythe: ['Ananas', 'Fourche du diable noire et violette.', ['Une fourche balaie 120° devant toi.', 'Deux fourches qui se croisent.', 'Grande fourche : dégâts reçus divisés par 2, poison dégressif.', 'Deux grandes fourches toxiques.', 'Fourche à tête de mort : devant puis derrière, poison constant jusqu\'au soin.']],
-    invis: ['Raisin fantôme', 'Tu deviens invisible. Les ennemis que tu touches sont blessés. En équipe, des alliés proches le deviennent aussi.', ['Invisible environ 4,6 s.', 'Invisible plus longtemps, dégâts plus forts.', 'Nuage de fumée : les ennemis proches sont réduits au silence.', 'Esquive de 0,8 s au lancement.', 'Nova d\'ombre : 35 dégâts, silence et recul autour de toi.']],
+    invis: ['Raisin fantôme', 'Bombes spéciales illimitées, séparées de tes 10 bombes normales. Les niveaux 1 à 4 sont des actions ponctuelles, le niveau 5 crée un domaine de ténèbres.', ['Frappe invisible : tu apparais derrière l\'ennemi le plus proche et collas une bombe piégée. Elle explose quand il utilise une capacité ou quand un autre ennemi l\'attaque.', 'Attaque furtive multiple : une bombe sur chaque ennemi de la zone, toutes explosent ensemble à la fin.', 'Bombe géante lancée sur le plus gros regroupement d\'ennemis, dégâts selon la distance au centre.', 'Bombe géante et double vie : une copie encaisse les coups à ta place, une seule fois par activation.', 'Domaine des ténèbres : 10 s, recharge 3 s. Les ennemis dans la bulle ne peuvent plus te viser, bombes spéciales renforcées.']],
     spider: ['Aubergine', 'Lance une toile : l\'ennemi est immobilisé, blessé dans la durée, puis ralenti.', ['Une toile.', 'Immobilisation et poison plus longs.', 'Deux toiles.', 'La toile saute sur un deuxième ennemi proche.', 'Trois toiles qui sautent.']],
     clown: ['Orange', 'Des clowns explosifs poursuivent les ennemis.', ['Un clown.', 'Deux clowns, explosion plus grande.', 'Trois clowns, l\'explosion étourdit.', 'Quatre clowns, plus rapides.', 'Cinq clowns, confettis géants.']],
     necro: ['Durian piquant', 'Une lance qui traverse les murs. L\'ennemi touché devient ton esclave et prend les coups à ta place.', ['Une lance, un esclave.', 'Jusqu\'à 2 esclaves, portée plus grande.', 'Deux lances.', 'Jusqu\'à 4 esclaves.', 'Trois lances en éventail, jusqu\'à 5 esclaves.']],
@@ -1452,4 +1445,273 @@ WB.GUIDE.tp = ['Fruit du dragon', 'Téléportation instantanée, sans jamais tra
   const u3 = WB.updateHands, d3 = WB.drawHands;
   WB.updateHands = function (dt) { u3(dt); WB.updateVit(dt); };
   WB.drawHands = function (ctx, g, time) { d3(ctx, g, time); WB.drawVit(ctx, g, time); };
+})(window.WB);
+
+// ===================== INVISIBILITÉ : spécification officielle (voir SPECS_CAPACITES.md) =====================
+(function (WB) {
+  'use strict';
+  const A = WB.ABIL, G = () => WB.G, PI2 = Math.PI * 2, I = A.invis;
+  const R1 = 420, R2 = 520, R3 = 700;                 // portées de détection niveaux 1, 2, 3 et 4
+  const D1 = { dir: 60, ind: 24 };                     // niveau 1 : dégâts directs / indirects (attaquant)
+  const D2 = { dir: 55, ind: 20, rad: 150, cap: 0.8 }; // niveau 2 : l'indirect cumulé reste sous 80 % du direct
+  const GB = { R: 200, max: 100, min: 30, wind: 0.45 }; // bombe géante : dégâts de 100 au centre à 30 au bord
+  const DV_LIFE = 12;                                  // la copie disparaît d'elle-même après 12 s si elle n'a pas été détruite
+  const DOME = { R: 250, dur: 10, rech: 3 };
+  const SB = { R: 95, dmg: 58, knock: 420 };           // bombe spéciale du niveau 5 (bombe normale : rayon 74, 32 dégâts)
+  const FUSE = 25;                                     // une bombe piégée jamais déclenchée se désamorce au bout de 25 s
+
+  I.type = 'zone';
+  I.cd = function (L) { return (L >= 5 ? DOME.dur + DOME.rech : 9) / WB.cdMul('invis'); };
+  I.range = function (L) { return L >= 5 ? DOME.R : L >= 3 ? R3 : L === 2 ? R2 : R1; };
+  I.desc = 'Niv.1 : bombe piégée derrière l\'ennemi le plus proche. Niv.2 : une bombe sur chaque ennemi de la zone. Niv.3 : bombe géante. Niv.4 : bombe géante et double vie. Niv.5 : domaine des ténèbres de 10 s.';
+  I.ai = { max: function (L) { return L >= 5 ? 330 : L >= 3 ? 560 : L === 2 ? 480 : 380; }, min: 0, cond: function (f, ab, t, d) { return ab.lvl >= 5 ? (f.hurtT > 0 || d < 300) : true; } };
+
+  function foe(f, t) { return t && t.alive && t.team !== f.team && !t.st.jump && !t.ghost && !t.decoy && !(t.respawnT > 0) && (t.kind === 'player' || t.kind === 'bot' || t.kind === 'boss' || t.kind === 'minion'); }
+  function foes(g, f, x, y, r) { const o = []; for (const t of g.F) if (foe(f, t) && Math.hypot(t.x - x, t.y - y) <= r) o.push(t); return o; }
+  function toast(f, m) { if (f === G().player && WB.ui && WB.ui.showToast) WB.ui.showToast(m, '#ffd0a0'); }
+  function resolve(s) { if (s && (s.kind === 'thrall' || s.kind === 'golem') && s.owner) return s.owner; if (s && s.thrall && s.thrall.owner) return s.thrall.owner; return s; }
+
+  // ---- destination vérifiée : jamais dans un mur, l'eau, hors carte ou sur quelqu'un
+  function freeSpot(g, f, x, y) {
+    const w = g.world, r = f.r, TS = WB.TS;
+    if (x < TS + r || y < TS + r || x > WB.WW - TS - r || y > WB.WH - TS - r) return false;
+    if (w.solidAt(x, y) || w.codeAt(x, y) === 2) return false;
+    if (w.collide({ x: x, y: y, r: r }, g.walls)) return false;
+    for (const t of g.F) if (t !== f && t.alive && !t.ghost && !t.st.jump && Math.hypot(t.x - x, t.y - y) < r + t.r * (t.scale || 1) - 2) return false;
+    return true;
+  }
+  function spotBehind(g, f, t) {
+    const dd = Math.hypot(t.x - f.x, t.y - f.y) || 1, ux = (t.x - f.x) / dd, uy = (t.y - f.y) / dd, rr = (t.r || 16) * (t.scale || 1) + f.r + 12;
+    // "derrière" = côté opposé à celui d'où l'on vient ; on essaie d'abord l'arrière réel de la cible (sa direction de regard)
+    const fx = t.face ? t.face.x : ux, fy = t.face ? t.face.y : uy, lst = [[-fx, -fy], [ux, uy]];
+    for (const b of lst) for (const off of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.7, -1.7, 2.4]) {
+      const c = Math.cos(off), s = Math.sin(off), vx = b[0] * c - b[1] * s, vy = b[0] * s + b[1] * c, x = t.x + vx * rr, y = t.y + vy * rr;
+      if (freeSpot(g, f, x, y)) return { x: x, y: y };
+    }
+    return null;
+  }
+  function blink(g, f, x, y, face) {
+    g.fx('ring', f.x, f.y, { r: 40, col: '#8a90d8', life: 0.35, w: 5 }); g.fx('burst', f.x, f.y, { col: '#cfd6ff', n: 12, life: 0.5 });
+    f.x = x; f.y = y; f.vx = f.vy = 0; f.kx = f.ky = 0;
+    if (face) { const dd = Math.hypot(face.x - x, face.y - y) || 1; f.face.x = (face.x - x) / dd; f.face.y = (face.y - y) / dd; f.aimLast = { x: f.face.x, y: f.face.y }; }
+    g.fx('ring', x, y, { r: 36, col: '#ffffff', life: 0.3, w: 4 }); g.fx('burst', x, y, { col: '#aab4e8', n: 12, life: 0.5 }); g.sfx('tp'); f.armT = 0.4;
+  }
+
+  // ---- bombe piégée attachée à un adversaire (une seule par porteur, une seule explosion)
+  function attach(g, owner, t, L, group) {
+    t.sBomb = { owner: owner, L: L, age: 0, group: group || null, done: false };
+    g.fx('ring', t.x, t.y, { r: 30, col: '#ff7a5a', life: 0.4, w: 4 }); g.text(t.x, t.y - 40, 'BOMBE', '#ff9a7a', 13);
+  }
+  function explodeBomb(c, trigger, attacker) {
+    const b = c.sBomb; if (!b || b.done) return; b.done = true; c.sBomb = null; const g = G();
+    g.fx('boom', c.x, c.y, { life: 0.5 }); g.fx('ring', c.x, c.y, { r: 70, col: '#ff8a5a', life: 0.4, w: 7 }); g.sfx('boom'); g.shake(6);
+    WB.__inBomb = true;
+    try {
+      if (c.alive) g.damage(c, D1.dir, b.owner, 'invis', {});
+      if (trigger === 'attack' && attacker && attacker.alive && attacker !== c) { g.fx('ring', attacker.x, attacker.y, { r: 36, col: '#ff8a5a', life: 0.35, w: 5 }); g.damage(attacker, D1.ind, b.owner, 'invis', {}); }
+    } finally { WB.__inBomb = false; }
+  }
+  // explosion simultanée de plusieurs bombes (niveau 2) : un seul calcul, un seul appel de dégâts par victime
+  function detonateGroup(owner, list) {
+    const g = G(), cs = list.filter(function (c) { return c.alive && c.sBomb && !c.sBomb.done; }), dmg = new Map();
+    for (const c of cs) dmg.set(c, D2.dir);
+    for (const a of cs) for (const b of cs) if (a !== b && Math.hypot(a.x - b.x, a.y - b.y) <= D2.rad) dmg.set(b, Math.min(D2.dir * (1 + D2.cap), dmg.get(b) + D2.ind));
+    for (const c of cs) { c.sBomb.done = true; c.sBomb = null; g.fx('boom', c.x, c.y, { life: 0.5 }); g.fx('ring', c.x, c.y, { r: D2.rad, col: '#ff8a5a', life: 0.45, w: 7 }); }
+    if (cs.length) { g.sfx('boom'); g.shake(9); }
+    WB.__inBomb = true;
+    try { for (const c of cs) if (c.alive) g.damage(c, dmg.get(c), owner, 'invis', {}); } finally { WB.__inBomb = false; }
+  }
+
+  // ---- niveau 1
+  function castL1(f, ab, aim) {
+    const g = G(); let t = aim && aim.target && foe(f, aim.target) && Math.hypot(aim.target.x - f.x, aim.target.y - f.y) <= R1 ? aim.target : g.nearest(f, R1);
+    if (!t || !foe(f, t)) { toast(f, 'Aucun adversaire à portée'); return false; }
+    const sp = spotBehind(g, f, t); if (!sp) { toast(f, 'Pas de place derrière la cible'); return false; }
+    blink(g, f, sp.x, sp.y, t); f.st.invis = 0.6; f.st.invuln = Math.max(f.st.invuln || 0, 0.6);
+    attach(g, f, t, 1, null); return true;
+  }
+
+  // ---- niveau 2 : séquence automatique de pose
+  function castL2(f, ab) {
+    const g = G(), tg = foes(g, f, f.x, f.y, R2); if (!tg.length) { toast(f, 'Aucun adversaire à portée'); return false; }
+    const order = [], rest = tg.slice(); let cx = f.x, cy = f.y;
+    while (rest.length) { let bi = 0, bd = 1e9; rest.forEach(function (t, i) { const d = Math.hypot(t.x - cx, t.y - cy); if (d < bd) { bd = d; bi = i; } }); const t = rest.splice(bi, 1)[0]; order.push(t); cx = t.x; cy = t.y; }
+    g.invSeqs = g.invSeqs || []; g.invSeqs.push({ f: f, order: order, i: 0, t: 0, placed: [] });
+    f.seqLock = true; f.st.invis = 0.3; f.st.invuln = Math.max(f.st.invuln || 0, 0.3); f.vx = f.vy = 0; return true;
+  }
+  function stepSeq(g, s, dt) {
+    const f = s.f;
+    if (!f.alive || f.respawnT > 0) { f.seqLock = false; detonateGroup(f, s.placed); return true; }
+    f.st.invis = Math.max(f.st.invis, 0.3); f.st.invuln = Math.max(f.st.invuln || 0, 0.3); f.vx = f.vy = 0;
+    s.t -= dt;
+    while (s.t <= 0 && s.i < s.order.length) {
+      const t = s.order[s.i++]; if (!foe(f, t)) continue;       // cible éliminée ou disparue : on passe à la suivante
+      const sp = spotBehind(g, f, t); if (sp) blink(g, f, sp.x, sp.y, t);
+      attach(g, f, t, 2, s); s.placed.push(t); s.t += 0.32;
+    }
+    if (s.i >= s.order.length && s.t <= 0) { f.seqLock = false; f.st.invis = 0; f.st.invuln = Math.max(f.st.invuln || 0, 0.2); g.fx('ring', f.x, f.y, { r: 44, col: '#ffffff', life: 0.35, w: 5 }); detonateGroup(f, s.placed); return true; }
+    return false;
+  }
+
+  // ---- niveaux 3 et 4 : bombe géante vers le plus gros regroupement
+  function bestCluster(g, f) {
+    const c = foes(g, f, f.x, f.y, R3); if (!c.length) return null; let best = null;
+    for (const a of c) {
+      const mem = c.filter(function (b) { return Math.hypot(b.x - a.x, b.y - a.y) <= GB.R * 0.9; });
+      const dd = Math.hypot(a.x - f.x, a.y - f.y), sc = mem.length * 10000 - dd;
+      if (!best || sc > best.sc) best = { sc: sc, mem: mem, a: a };
+    }
+    let x = 0, y = 0; for (const m of best.mem) { x += m.x; y += m.y; } x /= best.mem.length; y /= best.mem.length;
+    if (g.world.solidAt(x, y)) { x = best.a.x; y = best.a.y; }
+    return { x: x, y: y, n: best.mem.length };
+  }
+  function castBig(f, ab) {
+    const g = G(), cl = bestCluster(g, f); if (!cl) { toast(f, 'Aucun adversaire à portée'); return false; }
+    g.gBombs = g.gBombs || []; g.gBombs.push({ f: f, L: ab.lvl, state: 'wind', t: 0, tx: cl.x, ty: cl.y, x: f.x, y: f.y, u: 0, T: 0.8, h: 0 });
+    f.st.invis = GB.wind + 0.3; f.st.invuln = Math.max(f.st.invuln || 0, GB.wind + 0.3); f.armT = 0.5;
+    g.fx('ring', f.x, f.y, { r: 50, col: '#8a90d8', life: 0.5, w: 6 });
+    if (ab.lvl >= 4 && !f.dv) { f.dv = { hp: Math.max(60, f.hp), max: Math.max(60, f.hp), t: 0 }; g.fx('ring', f.x, f.y, { r: 60, col: '#7affe0', life: 0.5, w: 6 }); g.text(f.x, f.y - 50, 'DOUBLE VIE', '#7affe0', 16); }
+    return true;
+  }
+  function stepBig(g, b, dt) {
+    const f = b.f;
+    if (b.state === 'wind') {
+      if (!f.alive || f.respawnT > 0) return true;
+      b.t += dt; b.x = f.x; b.y = f.y; b.h = Math.min(1, b.t / GB.wind);
+      if (b.t >= GB.wind) {
+        const cl = bestCluster(g, f); if (cl) { b.tx = cl.x; b.ty = cl.y; }
+        b.x0 = f.x; b.y0 = f.y; b.T = Math.max(0.7, Math.hypot(b.tx - f.x, b.ty - f.y) / 360); b.u = 0; b.state = 'fly'; g.sfx('throw');
+      }
+      return false;
+    }
+    b.u += dt / b.T; const u = Math.min(1, b.u); b.x = b.x0 + (b.tx - b.x0) * u; b.y = b.y0 + (b.ty - b.y0) * u;
+    if (b.u < 1) return false;
+    g.fx('boom', b.tx, b.ty, { life: 0.8 }); g.fx('boom', b.tx + 40, b.ty - 20, { life: 0.7 }); g.fx('boom', b.tx - 40, b.ty + 20, { life: 0.7 });
+    g.fx('ring', b.tx, b.ty, { r: GB.R, col: '#ff7a3a', life: 0.55, w: 14 }); g.fx('ring', b.tx, b.ty, { r: GB.R * 0.6, col: '#ffe27a', life: 0.4, w: 9 }); g.fx('burst', b.tx, b.ty, { col: '#ffb060', n: 40, life: 0.9 });
+    g.invWaves = g.invWaves || []; g.invWaves.push({ x: b.tx, y: b.ty, t: 0 }); g.sfx('boom'); g.shake(14);
+    for (const t of g.F) {
+      if (!foe(f, t)) continue; const d = Math.hypot(t.x - b.tx, t.y - b.ty); if (d - t.r * (t.scale || 1) > GB.R) continue;
+      const k = Math.max(0, Math.min(1, (d - t.r * 0.5) / GB.R)), dmg = GB.max - (GB.max - GB.min) * k;
+      g.damage(t, dmg, f, 'invis', {}); const dd = d || 1; g.knock(t, (t.x - b.tx) / dd, (t.y - b.ty) / dd, 520 * (1 - 0.6 * k));
+    }
+    return true;
+  }
+
+  // ---- niveau 5 : domaine des ténèbres
+  function castDome(f, ab) {
+    const g = G(); if (f.dome) return false;
+    f.dome = { t: 0, ab: ab }; ab.cd = DOME.dur + DOME.rech;
+    g.fx('ring', f.x, f.y, { r: DOME.R, col: '#2a2e50', life: 0.7, w: 14 }); g.fx('burst', f.x, f.y, { col: '#6a6f9a', n: 24, life: 0.8 }); g.text(f.x, f.y - 56, 'DOMAINE DES TÉNÈBRES', '#b8bfff', 15); g.shake(4);
+    return true;
+  }
+  function endDome(f, why) {
+    const d = f.dome; if (!d) return; f.dome = null; if (d.ab) { d.ab.cd = DOME.rech; d.ab.n = 0; }
+    if (why === 'time') G().text(f.x, f.y - 46, 'Ténèbres dissipées', '#b8bfff', 14);
+  }
+  // l'attaquant situé dans la bulle ne peut pas verrouiller le porteur : ses attaques passent à côté
+  WB.domeMiss = function (src, t) {
+    if (!t || !t.dome || !src) return false; const s = resolve(src); if (!s || s.team === t.team) return false;
+    return Math.hypot(s.x - t.x, s.y - t.y) < DOME.R;
+  };
+  // bombe spéciale (niveau 5) : illimitée, ne touche jamais au stock de bombes normales
+  function throwSpecial(f, aim) {
+    const g = G(); if (!f.alive || f.bombCd > 0 || f.st.frozen > 0 || f.st.jump || f.dash || f.seqLock) return false;
+    f.bombCd = 0.7; const d = Math.max(90, Math.min(400, (aim.m == null ? 0.6 : aim.m) * 400)), a = Math.atan2(aim.y, aim.x);
+    let tx = f.x + Math.cos(a) * d, ty = f.y + Math.sin(a) * d, lx = f.x, ly = f.y; const n = Math.ceil(d / 20);
+    for (let i = 1; i <= n; i++) { const x = f.x + Math.cos(a) * d * i / n, y = f.y + Math.sin(a) * d * i / n; if (g.world.solidAt(x, y)) { tx = lx; ty = ly; break; } lx = x; ly = y; }
+    g.sBombs = g.sBombs || []; g.sBombs.push({ f: f, x0: f.x, y0: f.y, x: f.x, y: f.y, tx: tx, ty: ty, u: 0, T: Math.max(0.28, Math.hypot(tx - f.x, ty - f.y) / 420) });
+    g.sfx('throw'); f.armT = 0.3; f.aimLast = { x: aim.x, y: aim.y }; return true;
+  }
+
+  I.cast = function (f, ab, aim) {
+    const L = ab.lvl; if (f.seqLock) return false;
+    if (L === 1) return castL1(f, ab, aim);
+    if (L === 2) return castL2(f, ab);
+    if (L <= 4) return castBig(f, ab);
+    return castDome(f, ab);
+  };
+
+  // ---- branchements non intrusifs sur le moteur (posés une fois, à la première image)
+  function install(g) {
+    if (g.__invInstalled) return; g.__invInstalled = true;
+    const dmg0 = g.damage, use0 = g.useSlot, spl0 = g.splash, vis0 = g.visibleTo, thr0 = g.throwBomb;
+    g.damage = function (t, amt, src, ab, opt) {
+      opt = opt || {};
+      if (!t.alive || !(amt > 0)) return dmg0.call(g, t, amt, src, ab, opt);
+      if (t.dome && src && !opt.dot && WB.domeMiss(src, t)) { g.text(t.x, t.y - 34, 'Raté', '#b8bfff', 13); g.fx('burst', t.x, t.y, { col: '#4a4f80', n: 4, life: 0.3 }); return; }
+      const s = resolve(src), trig = t.sBomb && !t.sBomb.group && !WB.__inBomb && !opt.dot && s && s !== t && s.team !== t.team && s.team !== t.sBomb.owner.team;
+      const dv = t.dv && t.dv.hp > 0 && !(t.st.shield > 0 || t.st.jump || t.st.invuln > 0) ? t.dv : null;
+      if (dv) {
+        const real = t.hp; t.hp = real + 1e6; dmg0.call(g, t, amt, src, ab, opt); const lost = real + 1e6 - t.hp; t.hp = real; dv.hp -= lost;
+        if (dv.hp <= 0 && t.dv === dv) { t.dv = null; g.fx('burst', t.x, t.y, { col: '#7affe0', n: 24, life: 0.7 }); g.fx('ring', t.x, t.y, { r: 60, col: '#7affe0', life: 0.5, w: 8 }); g.text(t.x, t.y - 56, 'Copie détruite', '#7affe0', 15); t.st.invuln = Math.max(t.st.invuln || 0, 0.5); g.sfx('boom'); }
+      } else dmg0.call(g, t, amt, src, ab, opt);
+      if (trig && t.sBomb) explodeBomb(t, 'attack', s);
+    };
+    g.useSlot = function (f, i, aim) {
+      if (f.seqLock) return false;
+      const had = f.sBomb && !f.sBomb.group ? f.sBomb : null, r = use0.call(g, f, i, aim);
+      if (r && had && f.sBomb === had) explodeBomb(f, 'ability', null);
+      return r;
+    };
+    g.splash = function (f, x, y, r, d, ab, o) {
+      const hid = []; for (const t of g.F) if (t.dome && !t.st.jump && t.alive && WB.domeMiss(f, t)) { t.st.jump = 1; hid.push(t); }
+      try { return spl0.call(g, f, x, y, r, d, ab, o); } finally { for (const t of hid) t.st.jump = 0; }
+    };
+    g.visibleTo = function (f, t) { if (t.dome && f !== t && f.team !== t.team && Math.hypot(f.x - t.x, f.y - t.y) < DOME.R) return false; return vis0.call(g, f, t); };
+    g.throwBomb = function (f, aim) { if (f.dome && f.alive) return throwSpecial(f, aim); return thr0.call(g, f, aim); };
+  }
+
+  WB.updateInvis = function (dt) {
+    const g = G(); if (!g || !g.F) return; install(g);
+    for (const f of g.F) {
+      if (f.sBomb) { f.sBomb.age += dt; if (!f.alive || f.respawnT > 0 || (f.sBomb.age > FUSE && !f.sBomb.group)) f.sBomb = null; }
+      if (f.dv) { f.dv.t += dt; if (!f.alive || f.respawnT > 0 || f.dv.t > DV_LIFE) { if (f.alive && f.dv.hp > 0) g.fx('burst', f.x, f.y, { col: '#7affe0', n: 10, life: 0.5 }); f.dv = null; } }
+      if (f.seqLock && !(g.invSeqs && g.invSeqs.some(function (s) { return s.f === f; }))) f.seqLock = false;
+      const d = f.dome; if (!d) continue;
+      if (!f.alive || f.respawnT > 0) { f.dome = null; continue; }
+      d.t += dt; if (d.ab) d.ab.cd = Math.max(0.01, DOME.dur - d.t + DOME.rech);
+      if (d.t >= DOME.dur) endDome(f, 'time');
+    }
+    if (g.invSeqs) g.invSeqs = g.invSeqs.filter(function (s) { return !stepSeq(g, s, dt); });
+    if (g.gBombs) g.gBombs = g.gBombs.filter(function (b) { return !stepBig(g, b, dt); });
+    if (g.sBombs) g.sBombs = g.sBombs.filter(function (b) {
+      b.u += dt / b.T; const u = Math.min(1, b.u); b.x = b.x0 + (b.tx - b.x0) * u; b.y = b.y0 + (b.ty - b.y0) * u; if (b.u < 1) return true;
+      g.splash(b.f, b.tx, b.ty, SB.R, SB.dmg, 'invis', { knock: SB.knock }); g.fx('boom', b.tx, b.ty, { life: 0.55 }); g.fx('ring', b.tx, b.ty, { r: SB.R, col: '#8a90ff', life: 0.4, w: 7 }); g.sfx('boom'); g.shake(6); return false;
+    });
+    if (g.invWaves) { for (const w of g.invWaves) w.t += dt; g.invWaves = g.invWaves.filter(function (w) { return w.t < 0.7; }); }
+  };
+
+  WB.drawInvis = function (c, g, time) {
+    for (const f of g.F) {
+      const d = f.dome; if (!d || !f.alive) continue;
+      const rem = Math.max(0, DOME.dur - d.t), fade = Math.min(1, d.t / 0.4, rem / 0.5 + 0.0), R = DOME.R * (0.6 + 0.4 * Math.min(1, d.t / 0.35));
+      c.save(); const gr = c.createRadialGradient(f.x, f.y, R * 0.15, f.x, f.y, R); gr.addColorStop(0, 'rgba(8,8,24,' + 0.25 * fade + ')'); gr.addColorStop(0.75, 'rgba(6,6,20,' + 0.5 * fade + ')'); gr.addColorStop(1, 'rgba(2,2,12,' + 0.72 * fade + ')');
+      c.fillStyle = gr; c.beginPath(); c.arc(f.x, f.y, R, 0, PI2); c.fill();
+      c.strokeStyle = 'rgba(150,160,255,' + (0.45 + 0.2 * Math.sin(time * 4)) * fade + ')'; c.lineWidth = 3; c.setLineDash([10, 8]); c.lineDashOffset = -time * 20; c.beginPath(); c.arc(f.x, f.y, R, 0, PI2); c.stroke(); c.setLineDash([]);
+      for (let i = 0; i < 14; i++) { const a = time * 0.4 + i * PI2 / 14, rr = R * (0.35 + 0.6 * ((i * 0.37 + time * 0.15) % 1)); c.fillStyle = 'rgba(160,170,255,' + 0.25 * fade + ')'; c.beginPath(); c.arc(f.x + Math.cos(a) * rr, f.y + Math.sin(a) * rr, 2.5, 0, PI2); c.fill(); }
+      c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(f.x - 18, f.y + 38, 36, 5); c.fillStyle = rem < 2 ? '#ff8a6a' : '#b8bfff'; c.fillRect(f.x - 17, f.y + 39, 34 * (rem / DOME.dur), 3);
+      c.font = 'bold 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; c.fillStyle = '#fff'; const lab = rem.toFixed(1) + ' s'; c.strokeText(lab, f.x, f.y + 56); c.fillText(lab, f.x, f.y + 56); c.restore();
+    }
+    for (const f of g.F) {
+      if (f.sBomb && f.alive) { const b = f.sBomb, h = f.r * (f.scale || 1) + 14, bl = Math.floor(time * (b.group ? 4 : 8)) % 2; c.save(); c.globalAlpha = b.group ? 0.8 : 1; WB.drawIcon(c, 'bomb', f.x, f.y - h, 20); c.strokeStyle = bl ? '#ff5a3a' : '#ffb08a'; c.lineWidth = 2; c.beginPath(); c.arc(f.x, f.y - h, 14, 0, PI2); c.stroke(); c.restore(); }
+      if (f.dv && f.alive) {
+        const dv = f.dv, R = f.r * (f.scale || 1) + 10, p = Math.max(0, dv.hp / dv.max); c.save(); c.strokeStyle = 'rgba(122,255,224,' + (0.55 + 0.25 * Math.sin(time * 6)) + ')'; c.lineWidth = 3; c.setLineDash([5, 4]); c.beginPath(); c.arc(f.x, f.y, R + 4, 0, PI2); c.stroke(); c.setLineDash([]);
+        c.fillStyle = 'rgba(0,0,0,.55)'; c.fillRect(f.x - 20, f.y - R - 22, 40, 5); c.fillStyle = '#7affe0'; c.fillRect(f.x - 19, f.y - R - 21, 38 * p, 3);
+        c.font = 'bold 10px sans-serif'; c.textAlign = 'center'; c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.7)'; c.fillStyle = '#d8fff6'; c.strokeText('COPIE', f.x, f.y - R - 26); c.fillText('COPIE', f.x, f.y - R - 26); c.restore();
+      }
+    }
+    if (g.gBombs) for (const b of g.gBombs) {
+      c.save();
+      if (b.state === 'wind') { const f = b.f, sz = 20 + 54 * b.h; c.globalAlpha = 0.5 + 0.5 * b.h; WB.drawIcon(c, 'bomb', f.x, f.y - 52 - 14 * b.h, sz); }
+      else { const u = Math.min(1, b.u), h = Math.sin(u * Math.PI) * 120; c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(b.x, b.y + 8, 26, 10, 0, 0, PI2); c.fill();
+        c.strokeStyle = 'rgba(255,110,50,.6)'; c.lineWidth = 3; c.setLineDash([6, 8]); c.beginPath(); c.arc(b.tx, b.ty, GB.R, 0, PI2); c.stroke(); c.setLineDash([]);
+        c.fillStyle = 'rgba(255,90,40,.08)'; c.beginPath(); c.arc(b.tx, b.ty, GB.R, 0, PI2); c.fill(); WB.drawIcon(c, 'bomb', b.x, b.y - h - 20, 74); }
+      c.restore();
+    }
+    if (g.sBombs) for (const b of g.sBombs) { const u = Math.min(1, b.u), h = Math.sin(u * Math.PI) * 46; c.save(); c.fillStyle = 'rgba(0,0,0,.3)'; c.beginPath(); c.ellipse(b.x, b.y + 6, 10, 4, 0, 0, PI2); c.fill(); c.strokeStyle = 'rgba(140,150,255,.5)'; c.lineWidth = 2; c.setLineDash([3, 6]); c.beginPath(); c.arc(b.tx, b.ty, SB.R, 0, PI2); c.stroke(); c.setLineDash([]); c.shadowColor = '#8a90ff'; c.shadowBlur = 12; WB.drawIcon(c, 'bomb', b.x, b.y - h, 28); c.restore(); }
+    if (g.invWaves) for (const w of g.invWaves) { const u = w.t / 0.7; c.strokeStyle = 'rgba(255,140,70,' + (1 - u) + ')'; c.lineWidth = 16 * (1 - u) + 2; c.beginPath(); c.arc(w.x, w.y, GB.R * Math.min(1, u * 1.4), 0, PI2); c.stroke(); }
+  };
+  const u3 = WB.updateHands, d3 = WB.drawHands;
+  WB.updateHands = function (dt) { u3(dt); WB.updateInvis(dt); };
+  WB.drawHands = function (ctx, g, time) { d3(ctx, g, time); WB.drawInvis(ctx, g, time); };
 })(window.WB);

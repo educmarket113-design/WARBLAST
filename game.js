@@ -29,7 +29,7 @@
       const lv = o.level || 1;
       return {
         id: idc++, kind: o.kind, name: o.name, spec: o.spec, team: o.team, level: lv, x: o.x || 0, y: o.y || 0, vx: 0, vy: 0, kx: 0, ky: 0,
-        r: o.r || 22, scale: o.scale || 1, maxhp: o.maxhp, hp: o.maxhp, bombs: 5, bombCd: 0, slots: new Array(o.nslots != null ? o.nslots : WB.slotCount(lv)).fill(null),
+        r: o.r || 22, scale: o.scale || 1, maxhp: o.maxhp, hp: o.maxhp, bombs: 10, bombCd: 0, slots: new Array(o.nslots != null ? o.nslots : WB.slotCount(lv)).fill(null),
         st: {}, dots: [], alive: true, respawnT: 0, kills: 0, deaths: 0, mk: 0, coins: 0, face: { x: 1, y: 0 }, aimLast: { x: 1, y: 0 }, walk: 0, t: Math.random() * 10,
         hurtT: 0, flash: 0, lastHit: null, beacon: null, speed: o.speed || 205, owner: o.owner || null, thralls: [], want: { x: 0, y: 0 }, moving: false, dash: null,
         fixed: o.fixed || null, life: o.life || 0, drown: 0, ventT: 0, jumpH: 0, necro: null, shieldHit: null, invisHit: null,
@@ -458,7 +458,7 @@
           if (G.useSlot(f, i, aimAt(f, t, ab, def))) casts++;
         }
       }
-      if (casts === 0 && f.bombs > 0 && f.bombCd <= 0 && d > 110 && d < 390 && Math.random() < 0.5) G.throwBomb(f, aimAt(f, t, null, { range: () => 400 }));
+      if (casts === 0 && (f.bombs > 0 || f.dome) && f.bombCd <= 0 && d > 110 && d < 390 && Math.random() < 0.5) G.throwBomb(f, aimAt(f, t, null, { range: () => 400 }));
     }
     function aiThink(f, dt) {
       const ai = f.ai; ai.thinkT -= dt; ai.wanderT -= dt;
@@ -501,14 +501,14 @@
       if (f.sharkHold) { f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; }
       if (f.swallow) { f.swallow.t -= dt; if (f.swallow.t <= 0 || !f.swallow.v.alive) G.spit(f); }
       f.glutBig = f.slots.some(x => x && x.id === 'glut' && !x.stolen);
-      if (f.slots.some(x => x && x.id === 'cancel' && !x.stolen)) { if (f.bombs <= 0) { f.bombRegen = (f.bombRegen || 0) + dt; if (f.bombRegen >= 1) { f.bombs = 5; f.bombRegen = 0; f.bombCd = 0; G.fx('ring', f.x, f.y, { r: 44, col: '#aab4c8', life: 0.4, w: 5 }); if (f === G.player) G.sfx('pickup'); } } else f.bombRegen = 0; }
+      // les 10 bombes normales ne se régénèrent jamais (spécification Invisibilité)
       for (const x of f.slots) if (x && x.id === 'summon' && !x.form) { if (f === G.player) { if (!G.formPrompt) G.formPrompt = { ab: x, t: 10 }; } else x.form = ['shark', 'golem', 'dragon'][(Math.random() * 3) | 0]; }
       if (f.kind === 'golem') { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }
       tickDots(f, dt); if (!f.alive) return;
       if (f.necro) { f.necro.t -= dt; if (f.necro.t <= 0) f.necro = null; }
       if (f.kind === 'player' && !f.thrall) playerInput(f, dt); else aiThink(f, dt);
       if (f.thrall) { const th = f.thrall; th.t -= dt; if (!th.owner || !th.owner.alive || (th.phase === 1 ? th.t <= 0 : th.t <= 0)) { G.release(f); } }
-      const canMove = !(st.frozen > 0 || st.stun > 0 || st.root > 0 || st.jump || f.dash) && G.started;
+      const canMove = !(st.frozen > 0 || st.stun > 0 || st.root > 0 || st.jump || f.dash || f.seqLock) && G.started;
       let sp = f.speed; if (st.slowT > 0) sp *= 1 - (st.slowAmt || 0.4) * (st.slowT / (st.slowMax || 1));
       const inWater = W.isWaterAt(f.x, f.y) && !st.jump; if (inWater) sp *= 0.4;
       const mvx = canMove ? f.want.x * sp : 0, mvy = canMove ? f.want.y * sp : 0;
@@ -581,6 +581,7 @@
           if (WB.shieldProj) { const sr = WB.shieldProj(p); if (sr === 1) { dead = true; break; } }
           for (const t of G.F) {
             if (!t.alive || t.team === p.owner.team || (t.st.jump || t.ghost)) continue;
+            if (WB.domeMiss && WB.domeMiss(p.owner, t)) continue;
             if (Math.hypot(t.x - p.x, t.y - p.y) < t.r * t.scale * 0.9 + p.r) {
               if (t.st.shield > 0 || t.st.invuln > 0) { G.fx('burst', p.x, p.y, { col: '#9ad8ff', n: 6, life: 0.3 }); dead = true; break; }
               WB.__pa = Math.atan2(p.y - t.y, p.x - t.x); if (p.refl) G.srcOverride = p.refl;
