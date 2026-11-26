@@ -35,7 +35,8 @@
       if (k === 1 || k === 6) col = '#14161f'; else if (k === 2) col = '#3a7ad8'; else if (k === 3) col = '#2c5a22'; else if (k === 5) col = '#6a6a70';
       if (col) { g.fillStyle = col; g.fillRect(Math.floor(x * sx), Math.floor(y * sy), Math.ceil(sx), Math.ceil(sy)); }
     }
-    for (const hs of W.houses) { g.fillStyle = '#a0522d'; g.fillRect(hs.tx * sx, hs.ty * sy, 3 * sx, 2 * sy); }
+    for (const hs of W.houses) { g.fillStyle = '#a0522d'; g.fillRect(hs.tx * sx, hs.ty * sy, hs.w * sx, hs.h * sy); }
+    const gr = W.grass; g.fillStyle = 'rgba(60,170,70,.55)'; for (let y = 0; y < WB.GH; y++) for (let x = 0; x < WB.GW; x++) if (gr[y * WB.GW + x]) g.fillRect(Math.floor(x * sx), Math.floor(y * sy), Math.ceil(sx), Math.ceil(sy));
     U.mini = { cv: c, w: w, h: h };
   };
 
@@ -108,13 +109,14 @@
   };
   U.unassignAtk = function (i) { const f = WB.G.player; if (f.fusion) { U.showToast('Défusionne pour changer les capacités', '#ffd0a0'); return false; } normLoadout(f); const k = f.loadout.indexOf(i); if (k >= 0 && f.loadout.length > 1) { f.loadout[k] = null; return true; } return false; };
   function drawAbilityDisc(ctx, f, ab, cx, cy, r, o) {
-    const def = A[ab.id], G = WB.G, n = ab.n == null ? 5 : ab.n, recharge = ab.cd > 0, blocked = f.st.silence > 0 || f.st.frozen > 0 || f.swallowed, mx = def.cd(ab.lvl) * WB.cdMul(ab.id);
+    const def = A[ab.id], G = WB.G, n = ab.n == null ? 5 : ab.n, nx = WB.nextRecharge(ab), recharge = ab.cd > 0 || n <= 0, blocked = f.st.silence > 0 || f.st.frozen > 0 || f.swallowed, mx = def.cd(ab.lvl) * WB.cdMul(ab.id);
     ctx.save(); ctx.globalAlpha = o.drag ? 0.9 : 1;
     const g = ctx.createRadialGradient(cx, cy - r * 0.15, 3, cx, cy, r); g.addColorStop(0, '#1c2447'); g.addColorStop(1, '#0c1230'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r - 1, 0, PI2); ctx.fill();
     if (o.prog) { const fr = WB.abilProgress(ab), RR = r - 3; if (fr > 0) { ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, RR, 0, PI2); ctx.clip(); const top = cy + RR - 2 * RR * fr; ctx.fillStyle = def.col; ctx.globalAlpha = 0.8; ctx.fillRect(cx - RR, top, 2 * RR, cy + RR - top + 1); ctx.restore(); } }
     ctx.lineWidth = o.only ? 5 : 3.5; ctx.strokeStyle = o.loaded ? '#ffffff' : ab.stolen ? '#ff8ad0' : (recharge ? '#5a6490' : def.col); if (o.glow) { ctx.shadowColor = '#fff'; ctx.shadowBlur = 12 * o.glow; } ctx.stroke(); ctx.shadowBlur = 0;
     ctx.globalAlpha *= recharge ? 0.55 : 1; WB.drawIcon(ctx, (ab.id === 'summon' && ab.form) ? ab.form : ab.id, cx, cy - 1, r * 1.25); ctx.globalAlpha = o.drag ? 0.9 : 1;
-    if (recharge) { ctx.fillStyle = 'rgba(5,8,24,.68)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(ab.cd / mx, 0, 1)); ctx.closePath(); ctx.fill(); text(ab.cd >= 10 ? String(Math.ceil(ab.cd)) : ab.cd.toFixed(1), cx, cy, Math.max(12, r * 0.6), '#fff', 'center', 4); }
+    if (recharge) { const cdv = ab.cd > 0 ? ab.cd : (nx ? nx.t : 0), cmx = ab.cd > 0 ? mx : (nx ? nx.T : mx); ctx.fillStyle = 'rgba(5,8,24,.68)'; ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r - 2, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(cdv / cmx, 0, 1)); ctx.closePath(); ctx.fill(); if (cdv > 0) text(cdv >= 10 ? String(Math.ceil(cdv)) : cdv.toFixed(1), cx, cy, Math.max(12, r * 0.6), '#fff', 'center', 4); }
+    else if (nx) { ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(cx, cy, r + 3, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(1 - nx.t / nx.T, 0, 1)); ctx.stroke(); }
     if (blocked) { ctx.fillStyle = 'rgba(10,10,30,.45)'; ctx.beginPath(); ctx.arc(cx, cy, r - 2, 0, PI2); ctx.fill(); WB.drawIcon(ctx, 'lock', cx + r * 0.5, cy + r * 0.5, r * 0.5); }
     // charges restantes x/5
     const bw = Math.max(26, r * 0.9), bh = 15, bxx = cx + r * 0.55 - bw / 2 + 2, byy = cy + r - 8;
@@ -179,7 +181,7 @@
     return { x: dx / d, y: dy / d, m: clamp(d / (360 * v.z), 0.2, 1) };
   }
   // appui direct sur la capacité (ou sur l'analogue) : tir automatique sur l'adversaire le plus proche, sans bouger l'analogue
-  const NOTARGET_OK = { shield: 1, invis: 1 };
+  const NOTARGET_OK = { shield: 1, invis: 1, clone: 1 };
   function tapFire(only) {
     const G = WB.G, f = G.player; if (!f || !f.alive || !G.started || G.over || f.thrall || f.swallowed) return;
     if (f.fusion) { if (!WB.fusionReady(f)) { U.showToast((f.fusionCd || 0) > 0 ? 'Fusion en recharge : ' + Math.ceil(f.fusionCd) + ' s' : 'Fusion indisponible', '#ffd0a0'); return; } if (!WB.castFusion(f)) U.showToast('Aucun adversaire à portée', '#ffd0a0'); return; }

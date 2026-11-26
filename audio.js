@@ -87,6 +87,7 @@
       case 'ab_wind': noise(0.7, 0.18, 2200); noise(0.5, 0.1, 6000, 0.1); tone(180, 0.7, 'sine', 0.05, 320); break;
       case 'ab_scythe': noise(0.12, 0.28, 5500); tone(900, 0.14, 'sawtooth', 0.08, 180); noise(0.12, 0.2, 5000, 0.2); tone(800, 0.14, 'sawtooth', 0.07, 160, 0.2); break;
       case 'ab_invis': tone(1200, 0.45, 'sine', 0.1, 250); tone(1800, 0.3, 'sine', 0.05, 400, 0.05); break;
+      case 'ab_clone': tone(500, 0.08, 'square', 0.1); tone(750, 0.08, 'square', 0.1, null, 0.08); tone(300, 0.2, 'sawtooth', 0.1, 120, 0.18); break;
       case 'ab_spider': tone(900, 0.06, 'square', 0.08); tone(1000, 0.06, 'square', 0.08, null, 0.07); tone(800, 0.06, 'square', 0.08, null, 0.14); tone(600, 0.18, 'triangle', 0.1, 250, 0.2); break;
       case 'ab_clown': tone(330, 0.12, 'square', 0.12); tone(415, 0.12, 'square', 0.12, null, 0.12); tone(523, 0.12, 'square', 0.12, null, 0.24); tone(660, 0.25, 'square', 0.12, 520, 0.36); break;
       case 'ab_necro': tone(220, 0.35, 'sawtooth', 0.1, 190); tone(261, 0.35, 'sawtooth', 0.08, 220, 0.04); tone(155, 0.6, 'triangle', 0.12, 110, 0.3); break;

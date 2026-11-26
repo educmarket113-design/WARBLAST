@@ -316,7 +316,7 @@
       g.drawImage(S.wall, -20, 64); g.drawImage(S.wall, 5 * TS - 20, 96 + 64);
       if (S.water && id === 'nature') for (let x = 4; x < 6; x++) g.drawImage(S.water, x * TS - 20, 128);
       if (S.trees && S.trees.length) { g.drawImage(S.trees[0], 20, 40); g.drawImage(S.trees[1 % S.trees.length], 250, 90); }
-      if (S.houses && S.houses.length && id === 'urban') g.drawImage(S.houses[0], 150, 40);
+      if (S.houses && S.houses.length && id === 'urban') g.drawImage(S.houses[0], 140, 50, S.houses[0].width * 0.5, S.houses[0].height * 0.5);
     } catch (e) { g.fillStyle = '#555'; g.fillRect(0, 0, 200, 110); }
     prevCache[id] = c; return c;
   }
@@ -357,7 +357,7 @@
   U.startGame = function () {
     const s = U.save, sp = specOf();
     WB.snd.unlock(); WB.input.reset();
-    WB.startMatch({ arena: sel.arena, mode: sel.mode, name: s.name, spec: sp, playerLevel: charLv(sp.char), ranked: U.playType === 'world', duration: s.duration || 240 });
+    WB.startMatch({ arena: sel.arena, mode: sel.mode, name: s.name, spec: sp, playerLevel: charLv(sp.char), ranked: U.playType === 'world', friends: U.playType === 'friends', duration: s.duration || 240 });
     U.matchCfg = { arena: sel.arena, mode: sel.mode }; U.rewardDone = false; U.doubled = false; U.paused = false; U.chainMode = false; U.chainSel = [];
     U.buildMini(); U.go('game'); WB.sdk.hideBanner();
   };

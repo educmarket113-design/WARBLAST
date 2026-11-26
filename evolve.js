@@ -351,7 +351,7 @@ WB.GUIDE.fire = ['Piment', 'Boules de feu, rayons, puis lance-flammes. La brûlu
     const fl = WB.fusionLevel(f), abs = fu.abs.slice(), n = abs.length;
     const first = g.nearest(f, 520); if (!first) return false;
     fu.busy = true; f.fusionCd = WB.fusionCooldown(f);
-    abs.forEach(function (ab) { const def = A[ab.id]; ab.n = (ab.n == null ? 5 : ab.n) - 1; if (ab.n <= 0) { ab.n = 0; ab.cd = def.cd(ab.lvl) * WB.cdMul(ab.id); } });
+    abs.forEach(function (ab) { WB.spendCharge(f, ab); });
     let used = [], lastT = first;
     abs.forEach(function (ab, k) {
       g.later(k * STEP, function () {

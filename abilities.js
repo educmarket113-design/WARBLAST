@@ -327,10 +327,17 @@
     ai: { max: L => 330, min: 0, cond: (f, ab, t) => !!t && t.slots.some(Boolean) && !(t.st.silence > 0) }
   });
 
+  def('clone', {
+    name: 'Clonage explosif', col: '#ff8a3c', type: 'zone', cd: L => 10, range: L => 520,
+    desc: 'Invoque des clones explosifs qui combattent pour toi. Niv.1 : un clone qui poursuit et un clone caché de secours. Niv.2 : un gros clone t\'avale et encaisse. Niv.3 : 5 petits clones. Niv.4 : des parasites. Niv.5 : un protecteur et 2 clones parfaits.',
+    cast(f, ab) { return WB.castClone(f, ab); },
+    ai: { max: L => 520, min: 0 }
+  });
+
   WB.ABIL_IDS = Object.keys(A);
   // Rareté : les très puissantes apparaissent moins souvent
   WB.cdMul = id => (id === 'hole' || id === 'dash') ? 1 : 0.65; // recharges plus vives pour un jeu rapide
-  WB.ABIL_WEIGHT = { ice: 10, fire: 12, hole: 3, wall: 8, shield: 9, tp: 6, dash: 9, water: 8, wind: 8, scythe: 8, invis: 6, spider: 8, clown: 7, necro: 4, turret: 7, jump: 8, bolt: 8, glut: 5, summon: 5, cancel: 6 };
+  WB.ABIL_WEIGHT = { ice: 10, fire: 12, hole: 3, wall: 8, shield: 9, tp: 6, dash: 9, water: 8, wind: 8, scythe: 8, invis: 6, spider: 8, clone: 6, clown: 7, necro: 4, turret: 7, jump: 8, bolt: 8, glut: 5, summon: 5, cancel: 6 };
   WB.randomAbility = function () {
     let tot = 0; for (const k of WB.ABIL_IDS) tot += WB.ABIL_WEIGHT[k] || 5;
     let r = Math.random() * tot; for (const k of WB.ABIL_IDS) { r -= WB.ABIL_WEIGHT[k] || 5; if (r <= 0) return k; }
@@ -338,5 +345,28 @@
   };
   // nombre d'utilisations avant recharge : 5 pour toutes les capacités, 2 pour le trou noir
   WB.maxCharges = ab => (ab && ab.id === 'invis') ? (ab.lvl >= 5 ? 1 : 2) : (ab && ab.id === 'hole') ? 2 : (ab && (ab.id === 'shield' || ab.id === 'tp')) ? 1 : 5;
+  // capacités à fenêtre (le temps de recharge démarre à la fin de la fenêtre) : elles gardent l'ancien fonctionnement
+  WB.windowAbil = ab => !!ab && (ab.id === 'tp' || ab.id === 'shield' || (ab.id === 'invis' && ab.lvl >= 5) || (ab.id === 'spider' && ab.lvl >= 5));
+  // recharge individuelle : chaque charge utilisée lance tout de suite son propre compte à rebours
+  WB.spendCharge = function (f, ab) {
+    const def = A[ab.id], max = WB.maxCharges(ab), mul = f && f.kind === 'boss' ? 1.7 : f && f.kind === 'minion' ? 1.4 : 1;
+    ab.n = (ab.n == null ? max : ab.n) - 1; const T = def.cd(ab.lvl) * WB.cdMul(ab.id) * mul;
+    if (WB.windowAbil(ab)) { if (ab.n <= 0) { ab.n = 0; ab.cd = T; } return; }
+    if (ab.n < 0) ab.n = 0;
+    (ab.rech = ab.rech || []).push({ t: T, T: T });
+  };
+  WB.tickCharges = function (ab, dt) {
+    const max = WB.maxCharges(ab);
+    if (ab.rech && ab.rech.length) {
+      let k = 0; for (const r of ab.rech) r.t -= dt;
+      ab.rech = ab.rech.filter(r => { if (r.t <= 0) { k++; return false; } return true; });
+      if (k) ab.n = Math.min(max, (ab.n == null ? max : ab.n) + k);
+    }
+    if (ab.cd > 0) { ab.cd -= dt; if (ab.cd <= 0) { ab.cd = 0; ab.n = max; ab.rech = []; } }
+    else if (ab.n != null && ab.n < max && !(ab.rech && ab.rech.length) && !WB.windowAbil(ab)) ab.n = max;
+    else if (ab.n != null && ab.n <= 0 && WB.windowAbil(ab)) ab.n = max;
+  };
+  WB.restoreCharges = function (f) { for (const ab of f.slots) if (ab) { ab.n = WB.maxCharges(ab); ab.rech = []; ab.cd = 0; ab.gap = 0; } };
+  WB.nextRecharge = function (ab) { let b = null; if (ab.rech) for (const r of ab.rech) if (!b || r.t < b.t) b = r; return b; };
   WB.newAbility = function (id, lvl) { return { id: id, lvl: lvl || 1, kills: WB.abilXp[(lvl || 1) - 1] || 0, cd: 0, n: WB.maxCharges({ id: id }), gap: 0 }; };
 })(window.WB);

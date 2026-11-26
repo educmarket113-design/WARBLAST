@@ -68,21 +68,39 @@
     } else {
       for (let i = 0; i < 6; i++) blob(5 + R() * (GW - 10), 5 + R() * (GH - 10), 1.2 + R() * 1.2, 1 + R() * 1.2, 2, true);
     }
-    const nHouses = arenaId === 'urban' ? 15 : (arenaId === 'nature' ? 4 : 0);
-    for (let tries = 0, n = 0; n < nHouses && tries < 900; tries++) {
-      const x = 3 + Math.floor(R() * (GW - 8)), y = 3 + Math.floor(R() * (GH - 7));
-      if (!areaFree(x, y, 3, 2, 1)) continue;
-      for (let j = 0; j < 2; j++) for (let i = 0; i < 3; i++) set(x + i, y + j, 4);
-      houses.push({ tx: x, ty: y, style: Math.floor(R() * 3) }); n++;
+    // maisons accessibles : 6 x 5 cases, murs pleins, une porte en bas, une cloison avec passage, intérieur marqué dans room[]
+    const room = new Uint8Array(GW * GH), reserved = new Uint8Array(GW * GH);
+    const nHouses = arenaId === 'urban' ? 10 : (arenaId === 'nature' ? 4 : 0), HW = 6, HH = 5;
+    for (let tries = 0, n = 0; n < nHouses && tries < 1500; tries++) {
+      const x = 3 + Math.floor(R() * (GW - 10)), y = 3 + Math.floor(R() * (GH - 10));
+      if (!areaFree(x, y, HW, HH, 1)) continue;
+      for (let j = 0; j < HH; j++) for (let i = 0; i < HW; i++) set(x + i, y + j, 4);
+      for (let j = 1; j <= 3; j++) for (let i = 1; i <= 4; i++) { set(x + i, y + j, 0); room[(y + j) * GW + x + i] = n + 1; reserved[(y + j) * GW + x + i] = 1; }
+      set(x + 2, y + 4, 0); room[(y + 4) * GW + x + 2] = n + 1; reserved[(y + 4) * GW + x + 2] = 1;
+      for (let i = 0; i < 4; i++) reserved[(y + 5) * GW + x + 1 + i] = 1;
+      set(x + 3, y + 1, 4); set(x + 3, y + 2, 4); room[(y + 1) * GW + x + 3] = 0; room[(y + 2) * GW + x + 3] = 0;
+      houses.push({ tx: x, ty: y, w: HW, h: HH, id: n + 1, style: Math.floor(R() * 3) }); n++;
     }
     const nTrees = { donjon: 0, urban: 55, nature: 200 }[arenaId], nRocks = { donjon: 55, urban: 14, nature: 26 }[arenaId];
     for (let tries = 0, n = 0; n < nTrees && tries < 4000; tries++) {
       const x = 2 + Math.floor(R() * (GW - 4)), y = 2 + Math.floor(R() * (GH - 4));
-      if (get(x, y) !== 0) continue; set(x, y, 3); n++;
+      if (get(x, y) !== 0 || reserved[y * GW + x]) continue; set(x, y, 3); n++;
     }
     for (let tries = 0, n = 0; n < nRocks && tries < 2000; tries++) {
       const x = 2 + Math.floor(R() * (GW - 4)), y = 2 + Math.floor(R() * (GH - 4));
-      if (get(x, y) !== 0) continue; set(x, y, 5); n++;
+      if (get(x, y) !== 0 || reserved[y * GW + x]) continue; set(x, y, 5); n++;
+    }
+    // zones d'herbes : petites taches réparties sur le terrain, jamais dans une maison ni devant une porte
+    const grass = new Uint8Array(GW * GH), nGrass = { donjon: 11, urban: 13, nature: 16 }[arenaId];
+    for (let k = 0, tries = 0; k < nGrass && tries < 400; tries++) {
+      const cx = 4 + Math.floor(R() * (GW - 8)), cy = 4 + Math.floor(R() * (GH - 8)), rx = 1.1 + R() * 1.3, ry = 1.0 + R() * 1.1;
+      if (get(cx, cy) !== 0 || reserved[cy * GW + cx]) continue;
+      let cnt = 0;
+      for (let y = Math.floor(cy - ry); y <= Math.ceil(cy + ry); y++) for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+        const dx = (x - cx) / rx, dy = (y - cy) / ry; if (dx * dx + dy * dy > 1) continue;
+        if (get(x, y) === 0 && !reserved[y * GW + x]) { grass[y * GW + x] = 1; cnt++; }
+      }
+      if (cnt) k++;
     }
     // connectivité : tout sol inatteignable devient mur
     let sx = GW >> 1, sy = GH >> 1, found = false;
@@ -95,10 +113,20 @@
     for (let i = 0; i < g.length; i++) if (g[i] === 0 && !seen[i]) g[i] = 1;
 
     const W = {
-      arena: arenaId, g: g, houses: houses, vents: [], torches: [], spiderHomes: [], spawns: [], time: 0,
+      arena: arenaId, g: g, houses: houses, room: room, grass: grass, vents: [], torches: [], spiderHomes: [], spawns: [], time: 0,
       code: function (tx, ty) { return (tx < 0 || ty < 0 || tx >= GW || ty >= GH) ? 1 : g[ty * GW + tx]; },
       codeAt: function (x, y) { return W.code(Math.floor(x / TS), Math.floor(y / TS)); },
       isWaterAt: function (x, y) { return W.codeAt(x, y) === 2; },
+      roomAt: function (x, y) { const tx = Math.floor(x / TS), ty = Math.floor(y / TS); return (tx < 0 || ty < 0 || tx >= GW || ty >= GH) ? 0 : room[ty * GW + tx]; },
+      grassAt: function (x, y) { const tx = Math.floor(x / TS), ty = Math.floor(y / TS); return (tx < 0 || ty < 0 || tx >= GW || ty >= GH) ? 0 : grass[ty * GW + tx]; },
+      // vrai si un morceau du disque (x, y, r) touche une case d'herbe
+      grassNear: function (x, y, r) {
+        const x0 = Math.floor((x - r) / TS), x1 = Math.floor((x + r) / TS), y0 = Math.floor((y - r) / TS), y1 = Math.floor((y + r) / TS);
+        for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (tx >= 0 && ty >= 0 && tx < GW && ty < GH && grass[ty * GW + tx]) {
+          const cx = Math.max(tx * TS, Math.min(x, (tx + 1) * TS)), cy = Math.max(ty * TS, Math.min(y, (ty + 1) * TS)); if ((cx - x) * (cx - x) + (cy - y) * (cy - y) <= r * r) return true;
+        }
+        return false;
+      },
       pass: function (tx, ty) { return W.code(tx, ty) === 0; },
       collide: function (e, rects) {
         const r = e.r; let hit = false;
@@ -128,7 +156,7 @@
       randomFloor: function (margin) {
         for (let t = 0; t < 200; t++) {
           const tx = 2 + Math.floor(Math.random() * (GW - 4)), ty = 2 + Math.floor(Math.random() * (GH - 4));
-          if (!W.pass(tx, ty)) continue;
+          if (!W.pass(tx, ty) || room[ty * GW + tx]) continue;
           let ok = true;
           if (margin) for (let j = -margin; j <= margin && ok; j++) for (let i = -margin; i <= margin; i++) if (!W.pass(tx + i, ty + j)) { ok = false; break; }
           if (ok) return { x: tx * TS + TS / 2, y: ty * TS + TS / 2 };
@@ -169,7 +197,7 @@
     // points d'apparition : échantillonnage du plus éloigné
     const cands = [];
     for (let ty = 3; ty < GH - 3; ty++) for (let tx = 3; tx < GW - 3; tx++) {
-      let ok = true; for (let j = -1; j <= 1 && ok; j++) for (let i = -1; i <= 1; i++) if (!W.pass(tx + i, ty + j)) { ok = false; break; }
+      let ok = !room[ty * GW + tx]; for (let j = -1; j <= 1 && ok; j++) for (let i = -1; i <= 1; i++) if (!W.pass(tx + i, ty + j) || room[(ty + j) * GW + tx + i]) { ok = false; break; }
       if (ok) cands.push({ x: tx * TS + TS / 2, y: ty * TS + TS / 2 });
     }
     const spawns = [cands[Math.floor(R() * cands.length)]];

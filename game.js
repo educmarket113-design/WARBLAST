@@ -60,8 +60,8 @@
       if (boss) f.fixed.forEach((s, i) => { f.slots[i] = WB.newAbility(s[0], s[1]); });
       const p = W.randomFloor(1); f.x = p.x; f.y = p.y; f.home = { x: p.x, y: p.y }; G.F.push(f); return f;
     }
-    for (let i = 0; i < 10; i++) addMinion(false);
-    for (let i = 0; i < 2; i++) addMinion(true, i);
+    // mode Jouer entre amis : pas de sbires ni de boss, seuls les joueurs s'affrontent
+    if (!cfg.friends) { for (let i = 0; i < 10; i++) addMinion(false); for (let i = 0; i < 2; i++) addMinion(true, i); }
     for (const h of W.spiderHomes) G.spiders.push({ x: h.x, y: h.y, hx: h.x, hy: h.y, hp: 30, r: 16, alive: true, respawn: 0, biteCd: 0, tx: h.x, ty: h.y, wt: 0, t: Math.random() * 5, ang: 0 });
     for (const f of G.F) if (f.team !== 'S' && G.score[f.team] == null) G.score[f.team] = 0;
 
@@ -82,7 +82,14 @@
       for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; if (Math.hypot(t.x - x, t.y - y) <= r + t.r) out.push(t); }
       return out;
     };
-    G.visibleTo = function (f, t) { if (t.st.invis > 0 && dist(f, t) > 80) return false; return W.los(f.x, f.y, t.x, t.y); };
+    // maisons : la pièce où se trouve un combattant (0 = dehors). Dedans et dehors ne se voient pas, ni ne se ciblent.
+    G.roomOf = function (f) { return W.roomAt(f.x, f.y); };
+    G.roomBlock = function (f, t) { if (!f || !t || f === t || f.team === t.team) return false; return G.roomOf(f) !== G.roomOf(t); };
+    // herbes : un combattant dont le corps touche l'herbe est caché, sauf à moins de 110 px (camouflage, pas invisibilité)
+    G.inGrass = function (t) { return W.grassNear(t.x, t.y, t.r * 0.6); };
+    G.grassHides = function (f, t) { if (!f || !t || f === t || f.team === t.team) return false; return G.inGrass(t) && dist(f, t) > 110; };
+    G.hiddenFor = function (f, t) { return G.roomBlock(f, t) || G.grassHides(f, t); };
+    G.visibleTo = function (f, t) { if (t.st.invis > 0 && dist(f, t) > 80) return false; if (G.roomBlock(f, t)) return false; return W.los(f.x, f.y, t.x, t.y); };
     G.nearest = function (f, maxD) {
       let best = null, bd = maxD || 1e9;
       for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; const d = dist(f, t); if (d < bd && G.visibleTo(f, t)) { bd = d; best = t; } }
@@ -179,6 +186,11 @@
       const g = mkFighter({ kind: 'golem', name: 'Golem', spec: null, team: f.team, level: f.level, maxhp: 110 + 45 * L, x: f.x + 36, y: f.y, r: 28, scale: 1.4, speed: 185, nslots: 0, owner: f, life: 14 + 3 * L });
       g.bombs = 0; g.golemL = L; g.stoneT = 0.8; g.ai.mode = 'follow'; G.F.push(g); f.thralls.push(g);
       G.fx('ring', g.x, g.y, { r: 70, col: '#b8a48a', life: 0.5, w: 7 }); G.fx('burst', g.x, g.y, { col: '#9a9fac', n: 18, life: 0.6 }); G.shake(4); G.sfx('wall');
+    };
+    // clone du Clonage explosif : un combattant de type 'golem' (cible ordinaire pour les ennemis), géré par clone.js
+    G.mkClone = function (f, o) {
+      const g = mkFighter({ kind: 'golem', name: o.name || 'Clone', spec: f.spec, team: f.team, level: f.level, maxhp: o.hp, x: o.x, y: o.y, r: o.r || 22, scale: 1, speed: o.speed || 205, nslots: 0, owner: f, life: o.life || 60 });
+      g.bombs = 0; g.golemL = 1; g.cl = o.cl; g.ai.mode = 'fight'; g.hp = o.hp; if (o.ghost) g.ghost = true; G.F.push(g); return g;
     };
     G.addDragon = function (f, x, y, L) {
       const mine = G.turrets.filter(t => t.dragon && t.owner === f), cap = Math.ceil(L / 2); while (mine.length >= cap) { const o = mine.shift(); o.life = 0; }
@@ -302,12 +314,12 @@
     G.canCast = f => f.alive && !(f.st.frozen > 0) && !(f.st.silence > 0) && !(f.st.jump || f.ghost) && G.started;
     G.useSlot = function (f, i, aim) {
       const ab = f.slots[i]; if (ab && ab.id === 'tp' && f.tp && WB.tpNext) return WB.tpNext(f, ab, aim);
-      if (!ab || !G.canCast(f) || ab.cd > 0 || ab.gap > 0) return false;
+      if (!ab || !G.canCast(f) || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0)) return false;
       const def = A[ab.id]; if (def.type === 'aim' && aim.m == null) aim.m = 0.7;
       G.muteSfx = true; let r; try { r = def.cast(f, ab, aim); } finally { G.muteSfx = false; } if (r === false) return false;
       f.castT = 0.4; if (WB.evoFx) WB.evoFx(f, ab); { const pl = G.player, dd = pl ? Math.hypot(pl.x - f.x, pl.y - f.y) : 0, vv = f === pl ? 1 : Math.max(0, 1 - dd / 700) * 0.8; if (vv > 0.05) WB.snd.play('ab_' + ab.id, vv); }
-      // 5 utilisations par série, puis recharge de toute la série ; chaque capacité a ses propres charges
-      ab.n = (ab.n == null ? WB.maxCharges(ab) : ab.n) - 1; ab.gap = 0.4; if (ab.n <= 0) { ab.n = 0; ab.cd = def.cd(ab.lvl) * WB.cdMul(ab.id) * (f.kind === 'boss' ? 1.7 : f.kind === 'minion' ? 1.4 : 1); }
+      // 5 charges par capacité : chaque charge utilisée recharge tout de suite, individuellement
+      WB.spendCharge(f, ab); ab.gap = 0.4;
       f.aimLast = { x: aim.x, y: aim.y }; return true;
     };
     G.chain = function (f, list, aim) {
@@ -352,6 +364,14 @@
           for (let k = 0; k < n; k++) { const a = k / n * PI2 + Math.random(); addPickup({ kind: 'bloc', id: WB.randomAbility(), lvl: 2 + (Math.random() < 0.3 ? 1 : 0), mystery: k === 2, x: p.x + Math.cos(a) * 38, y: p.y + Math.sin(a) * 30, noPick: G.t + 0.45, pop: 1 }); }
           if (Math.random() < 0.5) addPickup({ kind: 'heart', x: p.x, y: p.y + 30, noPick: G.t + 0.45 });
         }
+        else if (p.kind === 'hchest') {
+          if ((f.kind !== 'player' && f.kind !== 'bot') || f.thrall || f.swallow) continue;
+          G.pickups.splice(i, 1); if (p.hc) { p.hc.on = false; p.hc.cd = 45; }
+          G.sfx('chest'); G.fx('burst', p.x, p.y, { col: HC_COL[p.sub], n: 22, life: 0.7 }); G.fx('ring', p.x, p.y, { r: 70, col: HC_COL[p.sub], life: 0.5, w: 6 });
+          if (p.sub === 'heal') { G.heal(f, Math.round(f.maxhp * 0.6)); G.text(f.x, f.y - 50, 'Coffre de soin', '#5aff8a', 15); G.fx('ring', f.x, f.y, { r: 60, col: '#7dff9a', life: 0.6, w: 5 }); }
+          else if (p.sub === 'fruit') { G.text(f.x, f.y - 50, 'Coffre de fruits', '#ffd24a', 15); for (let k = 0; k < 2; k++) { const a = k * Math.PI + Math.random(); addPickup({ kind: 'bloc', id: WB.randomAbility(), lvl: 2 + (Math.random() < 0.3 ? 1 : 0), mystery: k === 1, x: p.x + Math.cos(a) * 36, y: p.y + Math.sin(a) * 28, noPick: G.t + 0.45, pop: 1 }); } }
+          else { WB.restoreCharges(f); f.bombs = Math.max(f.bombs, 10); G.heal(f, Math.round(f.maxhp * 0.25)); G.text(f.x, f.y - 50, 'Charges rechargées', '#7ad8ff', 15); G.fx('ring', f.x, f.y, { r: 60, col: '#7ad8ff', life: 0.6, w: 5 }); }
+        }
         else if (p.kind === 'bloc') {
           if (f.kind === 'boss' || f.kind === 'thrall' || f.thrall || f.swallow) continue;
           if (p.mystery) { p.id = WB.randomAbility(); p.lvl = Math.random() < 0.7 ? 1 : (Math.random() < 0.7 ? 2 : 3); p.mystery = false; p.revealed = true; }
@@ -365,7 +385,20 @@
         }
       }
     }
+    const HC_COL = WB.HC_COL = { heal: '#5aff8a', fruit: '#ffd24a', recover: '#7ad8ff' };
+    // coffres de maison : un de chaque type par maison, qui reviennent 45 s après ouverture
+    G.houseChests = [];
+    for (const h of W.houses) for (const [sub, dx, dy] of [['heal', 1, 1], ['fruit', 4, 1], ['recover', 4, 3]]) {
+      const hc = { sub: sub, x: (h.tx + dx) * TS + TS / 2, y: (h.ty + dy) * TS + TS / 2, cd: 0, on: false, house: h.id }; G.houseChests.push(hc);
+    }
+    function houseChestTick(dt) {
+      for (const hc of G.houseChests) {
+        if (hc.on) continue; hc.cd -= dt;
+        if (hc.cd <= 0) { hc.on = true; addPickup({ kind: 'hchest', sub: hc.sub, hc: hc, x: hc.x, y: hc.y }); }
+      }
+    }
     function spawnPickups(dt) {
+      houseChestTick(dt);
       G.spawnT -= dt; if (G.spawnT > 0) return; G.spawnT = 0.8;
       let b = 0, h = 0, c = 0, ch = 0; for (const p of G.pickups) { if (p.kind === 'bloc') b++; else if (p.kind === 'heart') h++; else if (p.kind === 'chest') ch++; else c++; }
       const place = () => W.randomFloor(0);
@@ -374,6 +407,7 @@
       if (h < 10 && Math.random() < 0.5) { const p = place(); addPickup({ kind: 'heart', x: p.x, y: p.y }); }
       if (c < 70) { const p = place(); addPickup({ kind: 'coin', x: p.x, y: p.y }); }
     }
+    houseChestTick(0);
     for (let i = 0; i < 28; i++) { const p = W.randomFloor(0); addPickup({ kind: 'bloc', mystery: i % 7 === 3, id: WB.randomAbility(), lvl: 1, x: p.x, y: p.y }); }
     for (let i = 0; i < 9; i++) { const p = W.randomFloor(0); addPickup({ kind: 'chest', x: p.x, y: p.y }); }
     for (let i = 0; i < 10; i++) { const p = W.randomFloor(0); addPickup({ kind: 'heart', x: p.x, y: p.y }); }
@@ -417,7 +451,7 @@
     function decide(f) {
       const ai = f.ai, sight = f.kind === 'boss' ? 520 : f.kind === 'minion' ? 380 : 540;
       let best = null, bd = 1e9;
-      for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; const d0 = dist(f, t), d = (f.team !== 'S' && t.team === 'S') ? d0 * 1.5 : d0; if (d0 < sight && d < bd && G.visibleTo(f, t)) { bd = d; best = t; } }
+      for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; const d0 = dist(f, t), d = (f.team !== 'S' && t.team === 'S') ? d0 * 1.5 : d0; if (d0 < sight && d < bd && G.visibleTo(f, t) && !G.grassHides(f, t)) { bd = d; best = t; } }
       if (best) bd = dist(f, best);
       if (f.home) { const lim = f.kind === 'boss' ? 560 : 460; if (best && Math.hypot(best.x - f.home.x, best.y - f.home.y) > lim) best = null; if (!best && dist(f, f.home) > lim * 0.7) { ai.target = null; ai.mode = 'goto'; ai.goal = { x: f.home.x, y: f.home.y }; return; } }
       if (WB.tpBait) { const bt = WB.tpBait(f, best, sight); if (bt) best = bt; }
@@ -451,7 +485,7 @@
       const d = dist(f, t); let casts = 0; const maxC = WB.chainMax(f.level);
       if (!(f.st.silence > 0)) {
         for (let i = 0; i < f.slots.length && casts < maxC; i++) {
-          const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0) continue; const def = A[ab.id], ai = def.ai || {};
+          const ab = f.slots[i]; if (!ab || ab.cd > 0 || ab.gap > 0 || (ab.n != null && ab.n <= 0)) continue; const def = A[ab.id], ai = def.ai || {};
           const max = ai.max ? ai.max(ab.lvl) : def.range(ab.lvl), min = ai.min || 0;
           if (d > max || d < min) continue; if (ai.cond && !ai.cond(f, ab, t, d)) continue;
           if (Math.random() > (f.kind === 'minion' ? 0.3 : f.kind === 'boss' ? 0.5 : 0.65)) continue;
@@ -461,7 +495,7 @@
       if (casts === 0 && (f.bombs > 0 || f.dome) && f.bombCd <= 0 && d > 110 && d < 390 && Math.random() < 0.5) G.throwBomb(f, aimAt(f, t, null, { range: () => 400 }));
     }
     function aiThink(f, dt) {
-      const ai = f.ai; ai.thinkT -= dt; ai.wanderT -= dt;
+      const ai = f.ai; if (f.cl && f.cl.own) return; ai.thinkT -= dt; ai.wanderT -= dt;
       if (!G.started) { f.want.x = f.want.y = 0; return; }
       if (ai.thinkT <= 0) { ai.thinkT = f.kind === 'minion' ? 0.4 + Math.random() * 0.2 : 0.22 + Math.random() * 0.12; decide(f); if (ai.target) aiAttack(f); }
       let dx = 0, dy = 0; const t = ai.target;
@@ -495,7 +529,7 @@
       f.armT = Math.max(0, (f.armT || 0) - dt); f.castT = Math.max(0, (f.castT || 0) - dt);
       if (f.eat) { f.eat.t += dt; if (f.eat.t >= f.eat.dur) f.eat = null; }
       f.hurtT = Math.max(0, f.hurtT - dt); f.flash = Math.max(0, f.flash - dt); f.bombCd = Math.max(0, f.bombCd - dt); f.t += dt;
-      for (const ab of f.slots) if (ab) { if (ab.gap > 0) ab.gap -= dt; if (ab.cd > 0) { ab.cd -= dt; if (ab.cd <= 0) { ab.cd = 0; ab.n = WB.maxCharges(ab); } } else if (ab.n != null && ab.n <= 0) ab.n = WB.maxCharges(ab); }
+      for (const ab of f.slots) if (ab) { if (ab.gap > 0) ab.gap -= dt; WB.tickCharges(ab, dt); }
       if (f.kind === 'thrall' || f.kind === 'golem') { f.life -= dt; if (f.life <= 0 || !f.owner.alive) { G.kill(f, null, null); return; } }
       if (f.swallowed) { const sw = f.swallowed; if (!sw.by.alive) G.spit(sw.by); else { f.x = sw.by.x; f.y = sw.by.y; f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; } }
       if (f.sharkHold) { f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; }
@@ -503,7 +537,7 @@
       f.glutBig = f.slots.some(x => x && x.id === 'glut' && !x.stolen);
       // les 10 bombes normales ne se régénèrent jamais (spécification Invisibilité)
       for (const x of f.slots) if (x && x.id === 'summon' && !x.form) { if (f === G.player) { if (!G.formPrompt) G.formPrompt = { ab: x, t: 10 }; } else x.form = ['shark', 'golem', 'dragon'][(Math.random() * 3) | 0]; }
-      if (f.kind === 'golem') { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }
+      if (f.kind === 'golem' && !f.cl) { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }
       tickDots(f, dt); if (!f.alive) return;
       if (f.necro) { f.necro.t -= dt; if (f.necro.t <= 0) f.necro = null; }
       if (f.kind === 'player' && !f.thrall) playerInput(f, dt); else aiThink(f, dt);
@@ -698,12 +732,16 @@
       const c = W.code(tx, ty), X = tx * TS, Y = ty * TS;
       if (c === 2) { ctx.drawImage(S.water, X, Y); const ph = time * 1.4 + tx * 1.3 + ty * 0.7; ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(X + 32 + Math.sin(ph) * 8, Y + 32, 10 + Math.sin(ph * 1.3) * 3, 3.4, 5.9); ctx.stroke(); continue; }
       if (c === 1) { ctx.drawImage(S.wall, X, Y); continue; }
-      ctx.drawImage(S.floors[floorVar(S.arena, tx, ty)], X, Y);
+      if (c === 4) { ctx.drawImage(S.hwall, X, Y); continue; }
+      if (W.room[ty * WB.GW + tx]) ctx.drawImage(S.hfloor[(tx + ty) & 1], X, Y);
+      else ctx.drawImage(S.floors[floorVar(S.arena, tx, ty)], X, Y);
+      if (W.grass[ty * WB.GW + tx]) list.push({ y: Y + TS - 8, grass: (tx * 5 + ty * 3) % 3, x: X, yy: Y });
       if (c === 6) ctx.drawImage(S.wall2, X, Y);
       else if (c === 5) ctx.drawImage(S.rock, X, Y);
       else if (c === 3) list.push({ y: Y + TS + 6, tree: (tx * 7 + ty * 3) % S.trees.length, x: X, yy: Y });
     }
-    for (const h of W.houses) if (h.tx + 3 >= tx0 && h.tx <= tx1 && h.ty + 2 >= ty0 && h.ty <= ty1) list.push({ y: (h.ty + 2) * TS, house: h });
+    const pl0 = G.player, inRoom = (pl0 && pl0.alive) ? W.roomAt(pl0.x, pl0.y) : 0;
+    for (const h of W.houses) if (h.tx + h.w >= tx0 && h.tx <= tx1 && h.ty + h.h >= ty0 && h.ty <= ty1) ctx.drawImage(S.hdoor, (h.tx + 2) * TS, (h.ty + 4) * TS);
     // fontaines de flammes
     for (const v of W.vents) {
       if (v.x < vx0 - 60 || v.x > vx0 + vw + 60 || v.y < vy0 - 60 || v.y > vy0 + vh + 60) continue;
@@ -723,6 +761,7 @@
       if (p.kind === 'coin') { const sc = Math.abs(Math.cos(p.t * 3 + p.x)); ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 12, 8, 3, 0, 0, PI2); ctx.fill(); ctx.save(); ctx.translate(p.x, p.y + bob); ctx.scale(0.25 + sc * 0.75, 1); WB.drawIcon(ctx, 'coin', 0, 0, 16); ctx.restore(); }
       else if (p.kind === 'heart') { ctx.fillStyle = 'rgba(0,0,0,.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 16, 10, 3.5, 0, 0, PI2); ctx.fill(); const s = 1 + Math.sin(p.t * 5) * 0.08; ctx.save(); ctx.translate(p.x, p.y + bob); ctx.scale(s, s); ctx.shadowColor = '#ff4f6a'; ctx.shadowBlur = 12; WB.drawIcon(ctx, 'heart', 0, 0, 26); ctx.restore(); }
       else if (p.kind === 'chest') WB.drawChest(ctx, p, time);
+      else if (p.kind === 'hchest') WB.drawChest(ctx, p, time, WB.HC_COL[p.sub], p.sub);
       else WB.drawFruitPickup(ctx, p, time);
     }
     // balises de téléportation (visibles par l'équipe seulement)
@@ -733,8 +772,8 @@
     list.sort((a, b) => a.y - b.y);
     for (const o of list) {
       if (o.tree != null) ctx.drawImage(S.trees[o.tree], o.x + TS / 2 - 64, o.yy + TS / 2 - 66);
-      else if (o.house) ctx.drawImage(S.houses[o.house.style], o.house.tx * TS - 10, o.house.ty * TS - 6);
-      else if (o.f) drawFighter(ctx, o.f, G, time);
+      else if (o.grass != null) { const gx = o.x, gy = o.yy; ctx.globalAlpha = 0.97; ctx.drawImage(S.grass[o.grass], gx, gy); ctx.globalAlpha = 1; }
+      else if (o.f) { if (!(pl0 && o.f !== pl0 && G.hiddenFor(pl0, o.f))) drawFighter(ctx, o.f, G, time); }
       else if (o.clown) drawClown(ctx, o.clown, time);
       else if (o.turret) drawTurret(ctx, o.turret, time);
       else if (o.spider) drawSpider(ctx, o.spider, time);
@@ -745,6 +784,17 @@
     // effets
     for (const e of G.fxs) drawFx(ctx, e, G, time);
     if (WB.drawHands) WB.drawHands(ctx, G, time);
+    // toits : ils s'effacent quand on est dans la maison
+    for (const h of W.houses) {
+      if (h.tx + h.w < tx0 || h.tx > tx1 || h.ty + h.h < ty0 || h.ty > ty1) continue;
+      h.fade = h.fade == null ? 1 : h.fade; const tgt = inRoom === h.id ? 0 : 1; h.fade += (tgt - h.fade) * 0.25;
+      if (h.fade > 0.02) { ctx.globalAlpha = h.fade; ctx.drawImage(S.houses[h.style], h.tx * TS - 12, h.ty * TS - 8); ctx.globalAlpha = 1; }
+    }
+    // dans une maison : tout l'extérieur devient noir
+    if (inRoom) {
+      const h = W.houses.find(function (q) { return q.id === inRoom; });
+      if (h) { ctx.fillStyle = '#000'; ctx.beginPath(); ctx.rect(vx0 - 20, vy0 - 20, vw + 40, vh + 40); ctx.rect(h.tx * TS, h.ty * TS, h.w * TS, h.h * TS); ctx.fill('evenodd'); }
+    }
     // torches et obscurité du donjon
     if (S.arena === 'donjon') {
       ctx.fillStyle = 'rgba(4,4,18,.34)'; ctx.fillRect(vx0 - 10, vy0 - 10, vw + 20, vh + 20);
@@ -758,9 +808,10 @@
   };
 
   function drawFighter(ctx, f, G, time) {
-    const me = G.player, st = f.st; let alpha = 1; if (f.ghost) return;
+    const me = G.player, st = f.st; let alpha = 1; if (f.clone && f.clone.abs && WB.drawAbsorber) { WB.drawAbsorber(ctx, f, G, time); return; } if (f.ghost) return;
     if (st.invis > 0) alpha = (f.team === me.team) ? 0.35 : 0.05;
     if (st.invuln > 0 && Math.floor(time * 12) % 2) alpha *= 0.5;
+    if (f === me && G.inGrass && G.inGrass(f)) alpha *= 0.72;
     const R = f.r * f.scale, jh = f.jumpH || 0;
     if (f.mount && WB.drawMount) WB.drawMount(ctx, f, time);
     // anneau d'équipe
@@ -773,16 +824,17 @@
     const o = { t: f.t, walk: f.walk, moving: f.moving, fx: f.face.x, fy: f.face.y, alpha: alpha, flash: f.flash > 0, hurt: f.hurtT > 0, arm: (f.armT || 0) > 0, cast: Math.min(1, (f.castT || 0) / 0.3), jump: f.st.jump ? Math.sin(Math.min(1, f.st.jump.t / (f.st.jump.dur || 1)) * Math.PI) : 0 };
     if (f.kind === 'minion') WB.drawMinion(ctx, px, py, 1, o);
     else if (f.kind === 'boss') WB.drawMinion(ctx, px, py, f.scale, Object.assign(o, { boss: true }));
-    else if (f.kind === 'golem') WB.drawGolem(ctx, f, px, py, time, o);
+    else if (f.kind === 'golem' && !f.cl) WB.drawGolem(ctx, f, px, py, time, o);
     else if (f.kind === 'thrall') WB.drawBlob(ctx, f.spec, px, py, 1, Object.assign(o, { color: '#8e95a3', dead: true, alpha: 0.85 * alpha }));
     else {
       if (alpha > 0.1) WB.drawAura(ctx, f, time);
-      let sc = 1; if (f.eat) sc = WB.drawEat(ctx, f, time, o.fx >= 0 ? 1 : -1); if (f.glutBig) sc *= 1.3;
+      let sc = 1; if (f.eat) sc = WB.drawEat(ctx, f, time, o.fx >= 0 ? 1 : -1); if (f.glutBig) sc *= 1.3; if (f.cl && f.cl.sc) sc *= f.cl.sc;
       if (f.thrall) o.color = '#8e95a3', o.dead = true, o.alpha = 0.85 * alpha;
       const held = WB.heldOf(f), dir = o.fx >= 0 ? 1 : -1;
       if (held && alpha > 0.1 && dir < 0 === false) { /* main droite, derrière le corps si on regarde à gauche */ }
       WB.drawBlob(ctx, f.spec, px, py, sc, o);
       if (held && alpha > 0.1 && !f.eat) WB.drawHeld(ctx, held, px + dir * 21, py + 5, dir, time, f.moving ? Math.sin(time * 8) * 0.12 : 0);
+      if (f.cl && WB.drawCloneMark) WB.drawCloneMark(ctx, f, px, py, time);
       if (f.glutBig || f.swallow) WB.drawGlut(ctx, f, G, time, px, py, sc);
       if (alpha > 0.1) WB.drawAuraFront(ctx, f, time);
       if (f.thrall) {
