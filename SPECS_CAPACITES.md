@@ -206,3 +206,38 @@ Remplace l'ancienne Nécromancie (lance qui rend esclave). Chaque niveau garde l
 - Choix à valider : toutes les valeurs chiffrées, la durée du temple (12 s) et de la transformation (15 s), le fait que la faux possède aussi avec chaque coup, la possibilité de recapturer un possédé libéré tant que la transformation dure.
 - Limites : pas de test sur téléphone ni en multijoueur réseau ; le test de 70 s avec les bots sur 3 arènes monte à environ 150 invocations simultanées au maximum (plafonnées), sans erreur.
 - Tests : t110 (36 vérifications, chaque niveau), t113 (bots niveaux 1 à 5, 3 arènes, 70 s), régressions t60, t72, t83, t89, t91, t93, t97, t100, t101, t104.
+
+## Tourelle évolutive (refonte visuelle + missile niveau 5)
+
+Fichier : `turret.js` (nouveau). Les anciennes tourelles du dragon et de l'invocation restent gérées par `game.js`.
+
+### Niveaux (mécaniques conservées, rien de supprimé)
+| Niv | PV | Durée | Portée | Canons | Particularité |
+|---|---|---|---|---|---|
+| 1 | 120 | 18 s | 300 | 1 | ciblage auto, suivi, précision qui monte avec le temps de verrouillage |
+| 2 | 170 | 20 s | 330 | 2 | deux cibles différentes, ou focus (si la plus proche est sous 40 % de PV) |
+| 3 | 240 | 22 s | 350 | 2 | projectiles énergétiques, ralentissement 45 % pendant 2 s |
+| 4 | 320 | 24 s | 380 | 3 rotatifs | rafales de 6, pause 1,2 s, surchauffe (8 par tir, blocage 3 s à 100) |
+| 5 | 560 | 26 s | 420 | 4 | 4 cibles, rafales quadruples, surcharge, confinement 150 px, explosion finale |
+
+Maximum 2 tourelles par joueur (1 au niveau 5).
+
+### Apparences
+N1 petite tourelle ronde à un canon. N2 plus grande, deux nacelles. N3 anneaux de distorsion, noyau et bobines. N4 trois canons rotatifs, jauge de chaleur, vapeur. N5 base massive, quatre bras articulés, noyau central, anneau de confinement, lance-missile qui se soulève, jauge de surcharge.
+
+### Missile à tête chercheuse (niveau 5)
+- Rayon de détection 640 (canons : 420), avec ligne de vue.
+- Cible = adversaire avec le plus de PV actuels. Égalité : premier dans l'ordre de la liste des combattants. Un seul verrou par missile, jamais de changement.
+- Projectile réel : départ 190, accélération 330/s jusqu'à 540, virage 3,4 rad/s, durée de poursuite 5 s, explosion à l'impact, au bout des 5 s, sur un mur ou si la cible meurt.
+- Dégâts 75 (rayon 95, décroissants), explose aussi sur les tourelles ennemies.
+- Recharge propre de 3 s, maximum 3 missiles en vol, les canons ne s'arrêtent jamais.
+- Maison : cible entièrement dans une pièce différente de celle du missile = verrou perdu, le missile vole vers le dernier point connu, n'entre pas, et son explosion ne touche pas les cibles de l'autre pièce.
+- Herbe : un adversaire caché par les règles de camouflage (hors des 110 px) n'est ni verrouillé ni suivi. Invisibilité, fantôme et saut : même effet.
+- Explosion finale de la tourelle N5 (rayon 210, 110 dégâts) à la fin de sa durée ou à sa destruction.
+- Animation : le lanceur se lève 0,45 s avant le tir, le missile sort du lanceur, fumée, flamme, anneau rouge d'alerte sur le joueur visé. Son `missile` au lancement.
+
+### Tests réellement passés (Chromium headless, jeu réel)
+Structure et fonctions des 5 niveaux, cibles multiples, rafales, surchauffe, surcharge, confinement, explosion finale ; missile : cible au maximum de PV, départage stable, poursuite réelle, impact, fin à 5 s sans dégât, intervalle de 3 s, canons actifs pendant les poursuites ; maison (cible déjà dedans, cible qui y entre pendant la poursuite) ; herbe (cible cachée, cible qui s'y cache en cours de vol) ; mur ; durée de 60 s avec 14 tourelles actives sur les 3 arènes, aucune erreur, 0,3 à 2 ms par mise à jour ; régressions des tests précédents.
+
+### Limites
+Pas de test multijoueur réel ni sur téléphone possibles dans cet environnement. Valeurs d'équilibrage à valider en jeu.

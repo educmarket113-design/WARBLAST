@@ -643,7 +643,8 @@
       // tourelles
       for (let i = G.turrets.length - 1; i >= 0; i--) {
         const tu = G.turrets[i]; tu.life -= dt; tu.cd -= dt; tu.flash = Math.max(0, (tu.flash || 0) - dt);
-        if (tu.life <= 0) { G.turrets.splice(i, 1); continue; }
+        if (tu.life <= 0) { if (tu.adv && WB.turretEnd) WB.turretEnd(tu); G.turrets.splice(i, 1); continue; }
+        if (tu.adv) continue;
         if (tu.dragon) {
           let best = null, bd = 340; for (const t of G.F) { if (!t.alive || t.team === tu.owner.team || t.st.jump || t.ghost || t.st.invis > 0) continue; const d = Math.hypot(t.x - tu.x, t.y - tu.y); if (d < bd && W.los(tu.x, tu.y, t.x, t.y)) { bd = d; best = t; } }
           if (best) { tu.ang = Math.atan2(best.y - tu.y, best.x - tu.x); if (tu.cd <= 0) { tu.cd = 1.0; const L = tu.L; G.proj({ x: tu.x + Math.cos(tu.ang) * 26, y: tu.y + Math.sin(tu.ang) * 26, dx: Math.cos(tu.ang), dy: Math.sin(tu.ang), speed: 520, life: 0.7, r: 14, owner: tu.owner, ab: 'summon', lvl: L, kind: 'fire', onHit(p, t) { G.damage(t, 9 + 3 * L, tu.owner, 'summon'); G.burn(t, 14 + 6 * L, 3.5, tu.owner, 'summon'); G.fx('burst', p.x, p.y, { col: '#ff9a3c', n: 8, life: 0.4 }); return true; } }); G.sfx('fire'); tu.fireT = 0.3; } }
@@ -875,6 +876,7 @@
   }
   function drawTurret(ctx, t, time) {
     if (t.dragon) return WB.drawDragon(ctx, t, time);
+    if (t.adv) return WB.drawAdvTurret(ctx, t, time);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(t.x + 4, t.y + 10, 20, 8, 0, 0, PI2); ctx.fill();
     ctx.fillStyle = t.flash > 0 ? '#fff' : '#59606e'; ctx.strokeStyle = '#23262e'; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(t.x, t.y, 17, 0, PI2); ctx.fill(); ctx.stroke();
     ctx.save(); ctx.translate(t.x, t.y); ctx.rotate(t.ang); ctx.fillStyle = '#8a92a2'; ctx.fillRect(0, -5, 24, 10); ctx.strokeRect(0, -5, 24, 10); ctx.restore();
@@ -898,6 +900,7 @@
     const p = Math.max(0, w.hp / w.maxhp); if (p < 1) { ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.fillRect(w.x - 20, w.y - 5, 40, 6); ctx.fillStyle = '#ffd24a'; ctx.fillRect(w.x - 19, w.y - 4, 38 * p, 4); }
   }
   function drawProj(ctx, p, time) {
+    if (p.draw) { p.draw(ctx, p, time); return; }
     if (p.kind === 'bomb') {
       const u = Math.min(1, p.u), h = Math.sin(u * Math.PI) * 46; ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + 6, 9, 4, 0, 0, PI2); ctx.fill();
       ctx.strokeStyle = 'rgba(255,170,60,.35)'; ctx.lineWidth = 2; ctx.setLineDash([3, 6]); ctx.beginPath(); ctx.arc(p.tx, p.ty, 74, 0, PI2); ctx.stroke(); ctx.setLineDash([]);

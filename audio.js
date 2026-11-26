@@ -124,6 +124,7 @@
       case 'swing': noise(0.15, 0.2, 3500); tone(700, 0.15, 'sawtooth', 0.06, 200); break;
       case 'invis': tone(900, 0.3, 'sine', 0.1, 300); break;
       case 'web': tone(700, 0.2, 'triangle', 0.12, 300); break;
+      case 'missile': tone(160, 0.12, 'sawtooth', 0.12, 700); tone(90, 0.4, 'square', 0.08, 300, 0.05); break;
       case 'clown': tone(400, 0.1, 'square', 0.12); tone(600, 0.1, 'square', 0.12, null, 0.1); tone(500, 0.15, 'square', 0.12, null, 0.2); break;
       case 'spear': tone(500, 0.15, 'sawtooth', 0.1, 900); break;
       case 'jump': tone(200, 0.35, 'sine', 0.2, 600); break;

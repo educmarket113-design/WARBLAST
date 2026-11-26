@@ -235,13 +235,7 @@
   def('turret', {
     name: 'Tourelle', col: '#8a92a2', type: 'aim', cd: L => 11, range: L => 180,
     desc: 'Pose des tourelles (autant que ton niveau) qui tirent sur les ennemis proches.',
-    cast(f, ab, aim) {
-      const g = G(), L = ab.lvl; let d = 50 + 130 * clamp(aim.m, 0, 1), x, y, ok = false;
-      for (let k = 0; k < 4 && !ok; k++, d -= 28) { x = f.x + aim.x * d; y = f.y + aim.y * d; ok = !g.world.solidAt(x, y) && g.world.pass(Math.floor(x / WB.TS), Math.floor(y / WB.TS)); }
-      if (!ok) { x = f.x; y = f.y; }
-      g.addTurret({ x: x, y: y, hp: 60 + 10 * L, maxhp: 60 + 10 * L, owner: f, L: L, life: 16, cd: 0.4, ang: 0 });
-      g.sfx('wall');
-    },
+    cast(f, ab, aim) { return WB.castTurret(f, ab, aim); },
     ai: { max: L => 340, min: 0 }
   });
 
