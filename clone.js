@@ -301,6 +301,10 @@
     for (const x of g.F) if (x.cl && x.cl.type === 'small' && x.alive && me && x.team === me.team) { ctx.strokeStyle = 'rgba(255,162,58,.18)'; ctx.lineWidth = 2; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(x.x, x.y, x.cl.det, 0, PI2); ctx.stroke(); ctx.setLineDash([]); }
   };
 
+  // Le Clonage explosif remplace le Clown : le Clown n'est plus proposé (fruits, coffres, bots, guide)
+  WB.ABIL_IDS = WB.ABIL_IDS.filter(function (k) { return k !== 'clown'; });
+  delete WB.ABIL_WEIGHT.clown; if (WB.GUIDE) delete WB.GUIDE.clown;
+
   const upd = WB.updateHands, drw = WB.drawHands;
   WB.updateHands = function (dt) { upd(dt); WB.updateClones(dt); };
   WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawClones(ctx, g, time); };

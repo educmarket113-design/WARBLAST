@@ -191,3 +191,5 @@ Clonage explosif (nouvelle capacité, fruit : deux pêches jumelles, recharge 10
 - Choix à valider : toutes les valeurs ci-dessus sont les miennes ; tant qu'il est avalé le joueur peut bouger et lancer ses capacités ; un seul clone poursuiveur au niveau 1 (le texte disait « un clone poursuiveur » ).
 - Limites : pas de test sur téléphone ni en multijoueur réseau. Les attaques qui frappent au travers d'un mur (zones) ne vérifient pas encore la séparation des pièces, seul le ciblage la respecte.
 - Tests : t100 (modes, maisons, herbes, coffres), t101 (26 vérifications du Clonage), t102 (70 s de bots lançant la capacité en boucle sur les 3 arènes, aucune erreur), t104 (clones et maisons/herbes). Régressions t60, t83, t85, t89, t91, t93, t97, t72 (certaines attentes adaptées au nouveau modèle de recharge).
+
+Précision du 26/11 : le Clonage explosif remplace le Clown. Le Clown n'est plus proposé (fruits, coffres, bots, guide) ; la liste reste à 20 capacités.
