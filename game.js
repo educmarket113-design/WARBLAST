@@ -452,6 +452,7 @@
       const ai = f.ai, sight = f.kind === 'boss' ? 520 : f.kind === 'minion' ? 380 : 540;
       let best = null, bd = 1e9;
       for (const t of G.F) { if (!t.alive || t.team === f.team || (t.st.jump || t.ghost)) continue; const d0 = dist(f, t), d = (f.team !== 'S' && t.team === 'S') ? d0 * 1.5 : d0; if (d0 < sight && d < bd && G.visibleTo(f, t) && !G.grassHides(f, t)) { bd = d; best = t; } }
+      if (!best && ((f.cl && f.cl.roam) || (f.thrall && f.thrall.roam)) && WB.roamTarget) best = WB.roamTarget(f);
       if (best) bd = dist(f, best);
       if (f.home) { const lim = f.kind === 'boss' ? 560 : 460; if (best && Math.hypot(best.x - f.home.x, best.y - f.home.y) > lim) best = null; if (!best && dist(f, f.home) > lim * 0.7) { ai.target = null; ai.mode = 'goto'; ai.goal = { x: f.home.x, y: f.home.y }; return; } }
       if (WB.tpBait) { const bt = WB.tpBait(f, best, sight); if (bt) best = bt; }
@@ -751,6 +752,7 @@
     // objets à trier
     for (const f of G.F) if (f.alive) list.push({ y: f.y + 1, f: f });
     for (const c of G.clowns) list.push({ y: c.y, clown: c });
+    if (G.necTemples) for (const q of G.necTemples) { list.push({ y: -9999, tzone: q }); list.push({ y: q.y + 70, temple: q }); }
     for (const t of G.turrets) list.push({ y: t.y, turret: t });
     for (const s of G.spiders) if (s.alive) list.push({ y: s.y, spider: s });
     for (const w of G.walls) list.push({ y: w.y + w.h / 2, wall: w });
@@ -775,6 +777,8 @@
       else if (o.grass != null) { const gx = o.x, gy = o.yy; ctx.globalAlpha = 0.97; ctx.drawImage(S.grass[o.grass], gx, gy); ctx.globalAlpha = 1; }
       else if (o.f) { if (!(pl0 && o.f !== pl0 && G.hiddenFor(pl0, o.f))) drawFighter(ctx, o.f, G, time); }
       else if (o.clown) drawClown(ctx, o.clown, time);
+      else if (o.tzone) WB.drawTempleZone(ctx, o.tzone, time);
+      else if (o.temple) WB.drawTemple(ctx, o.temple, time);
       else if (o.turret) drawTurret(ctx, o.turret, time);
       else if (o.spider) drawSpider(ctx, o.spider, time);
       else if (o.wall) drawWall(ctx, o.wall);
@@ -808,7 +812,7 @@
   };
 
   function drawFighter(ctx, f, G, time) {
-    const me = G.player, st = f.st; let alpha = 1; if (f.clone && f.clone.abs && WB.drawAbsorber) { WB.drawAbsorber(ctx, f, G, time); return; } if (f.ghost) return;
+    const me = G.player, st = f.st; let alpha = 1; if (f.cl && f.cl.skel && WB.drawSkelUnit) { WB.drawSkelUnit(ctx, f, G, time); return; } if (f.necForm && WB.drawDeathKing) { WB.drawDeathKing(ctx, f, G, time); return; } if (f.clone && f.clone.abs && WB.drawAbsorber) { WB.drawAbsorber(ctx, f, G, time); return; } if (f.ghost) return;
     if (st.invis > 0) alpha = (f.team === me.team) ? 0.35 : 0.05;
     if (st.invuln > 0 && Math.floor(time * 12) % 2) alpha *= 0.5;
     if (f === me && G.inGrass && G.inGrass(f)) alpha *= 0.72;

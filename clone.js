@@ -112,6 +112,7 @@
   function updateBody(g, f, dt) {
     const c = f.cl, ow = f.owner; if (c.done) return;
     if (!ow || !ow.alive) { silentRemove(f); return; }
+    if (c.skel) return;
     c.age += dt;
     if (c.type === 'hidden') { f.want.x = f.want.y = 0; f.vx = f.vy = 0; return; }
     if (c.type === 'perfect') return;
@@ -305,6 +306,7 @@
   WB.ABIL_IDS = WB.ABIL_IDS.filter(function (k) { return k !== 'clown'; });
   delete WB.ABIL_WEIGHT.clown; if (WB.GUIDE) delete WB.GUIDE.clown;
 
+  WB.CU = { foeOk: foeOk, nearestFoe: nearestFoe, steer: steer, silentRemove: silentRemove, real: real, ringPos: ringPos, dist: dist };
   const upd = WB.updateHands, drw = WB.drawHands;
   WB.updateHands = function (dt) { upd(dt); WB.updateClones(dt); };
   WB.drawHands = function (ctx, g, time) { drw(ctx, g, time); WB.drawClones(ctx, g, time); };

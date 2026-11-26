@@ -181,7 +181,7 @@
     return { x: dx / d, y: dy / d, m: clamp(d / (360 * v.z), 0.2, 1) };
   }
   // appui direct sur la capacité (ou sur l'analogue) : tir automatique sur l'adversaire le plus proche, sans bouger l'analogue
-  const NOTARGET_OK = { shield: 1, invis: 1, clone: 1 };
+  const NOTARGET_OK = { shield: 1, invis: 1, clone: 1, necro: 1 };
   function tapFire(only) {
     const G = WB.G, f = G.player; if (!f || !f.alive || !G.started || G.over || f.thrall || f.swallowed) return;
     if (f.fusion) { if (!WB.fusionReady(f)) { U.showToast((f.fusionCd || 0) > 0 ? 'Fusion en recharge : ' + Math.ceil(f.fusionCd) + ' s' : 'Fusion indisponible', '#ffd0a0'); return; } if (!WB.castFusion(f)) U.showToast('Aucun adversaire à portée', '#ffd0a0'); return; }
