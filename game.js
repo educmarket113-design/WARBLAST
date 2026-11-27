@@ -553,7 +553,7 @@
       if (st.jump) {
         const j = st.jump; j.t += dt; const u = Math.min(1, j.t / j.dur);
         f.x = j.x0 + (j.x1 - j.x0) * u; f.y = j.y0 + (j.y1 - j.y0) * u; f.jumpH = Math.sin(u * Math.PI) * 70;
-        if (u >= 1) { st.jump = null; f.jumpH = 0; W.collide(f, G.walls); land(f, j); }
+        if (u >= 1) { st.jump = null; f.jumpH = 0; W.collide(f, G.walls); if (WB.rebLand) WB.rebLand(f, j, land); else land(f, j); }
       } else if (f.dash) {
         const d = f.dash; d.t -= dt; const step = 1700 * dt;
         f.x += d.dx * step; f.y += d.dy * step; W.collide(f, G.walls);

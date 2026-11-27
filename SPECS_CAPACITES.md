@@ -271,3 +271,26 @@ Aura sans appui sur le bouton aux 5 niveaux ; porteur et allié jamais affectés
 
 ### Limites
 Pas de test multijoueur réel ni sur téléphone. Les bombes et l'aura sont calculées par le même moteur pour tous, mais la synchronisation réseau n'a pas pu être vérifiée. Un "rebond" = 3 rebonds au sol puis explosion au 4e contact. Les invocations déjà posées par un ennemi (golem, tourelles) ne sont pas annulées, seules ses capacités le sont. Valeurs d'équilibrage à valider.
+
+## Rebond : atterrissages multiples, cratères et éclats de terre (27/11)
+
+Fichiers : `rebound.js` (nouveau), `game.js` (1 ligne : l'atterrissage passe par `WB.rebLand`), `index.html`. Les niveaux 1 et 2 sont inchangés.
+
+| Niv | Atterrissages | Cratères par atterrissage | Rebond + étourdissement de l'adversaire |
+|---|---|---|---|
+| 1-2 | 1 (comme avant) | aucun | non (étourdissement long habituel) |
+| 3 | 2 | 1 cercle (0,6 du rayon d'impact) | non, étourdissement habituel |
+| 4 | 3 | 2 cercles (0,4 et 0,8, le grand encercle le petit) | oui, étourdi 0,5 s à chaque impact |
+| 5 | 3 | 3 cercles (0,3 / 0,6 / 0,9) | oui, 0,5 s, puis météore final qui enflamme |
+
+- Dégâts : chaque atterrissage supplémentaire inflige 25 % de plus que le précédent. Atterrissage = 55 % des dégâts de base du niveau (pour compenser le nombre d'atterrissages), le deuxième onde et le météore se produisent au dernier atterrissage.
+- Cratères : anneaux sombres visibles 4 s au sol. De la terre jaillit de chaque anneau (de 38 à 128 morceaux par utilisation selon le niveau), les anneaux se déclenchent du plus proche au plus éloigné. Un morceau de terre blesse l'adversaire qui se trouve sur le cratère : 6 / 7 / 8 dégâts, un seul coup par cratère et par adversaire.
+- Rebond adverse (niveau 4+) : l'adversaire touché est soulevé visuellement (34 px) pendant 0,42 s, il reste ciblable et vulnérable, étourdi 0,5 s.
+- Les rebonds enchaînés du joueur : 0,4 s chacun, 120 px, orientés vers l'adversaire le plus proche à moins de 300 px, sinon dans la direction du premier bond ; le joueur reste intouchable en l'air comme avant.
+- Maisons : ondes, éclats et météore ne blessent pas un ennemi dans une autre pièce ; les éclats ne naissent pas au-delà d'un mur.
+
+### Tests réellement passés
+Niveaux 1-2 un seul atterrissage sans cratère ; niveaux 3, 4, 5 : 2, 3, 3 atterrissages avec 1, 2, 3 cratères chacun ; éclats plus nombreux avec le niveau (38, 78, 128) ; dégâts croissants à chaque atterrissage (par exemple niveau 4 : 31,9 / 39,9 / 47,8) ; éclats qui blessent l'adversaire placé sur le cratère, un coup max par cratère, jamais l'allié ; pas de rebond adverse au niveau 3, rebond et étourdissement de 0,5 s aux niveaux 4 et 5 ; maison ; 70 s avec bots Rebond sur les 3 arènes (0,2 à 0,45 ms moyens, aucun éclat ni cratère qui reste, aucun bond bloqué, aucune erreur) ; anciens tests de régression.
+
+### Limites
+Pas de test multijoueur ni sur téléphone. Interprétation à valider : « à chaque atterrissage » = plusieurs atterrissages à enchaîner à partir du niveau 3 (2, 3, 3). Si tu veux un seul atterrissage, il suffit de changer un nombre. Les ondes du niveau 1 et 2 gardent le comportement d'avant (elles passent encore à travers les murs de maison, comme avant).
