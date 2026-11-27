@@ -241,3 +241,33 @@ Structure et fonctions des 5 niveaux, cibles multiples, rafales, surchauffe, sur
 
 ### Limites
 Pas de test multijoueur réel ni sur téléphone possibles dans cet environnement. Valeurs d'équilibrage à valider en jeu.
+
+## Annulation (aura automatique + bombes évolutives)
+
+Fichiers : `cancel.js` (nouveau), `game.js` (2 lignes : ralentissement et recharge des ennemis dans l'aura), `index.html` (chargement du script). Aucun deuxième analog. Les anciens effets d'Annulation (silence ciblé) sont remplacés.
+
+### Aura (automatique, sans bouton)
+Active tant que la capacité est équipée et le porteur vivant. Cercle violet visible par tous, qui suit le porteur. Jamais sur le porteur ni ses coéquipiers. Un ennemi enfermé dans une maison n'est pas touché.
+| Niv | Rayon | Dégâts adverses | Capacités adverses | Ralentissement |
+|---|---|---|---|---|
+| 1 | 135 | /2 | dégâts -50 % en plus, recharge à 50 % | 10 % |
+| 2 | 155 | /3 | -70 %, recharge à 65 % | 20 % |
+| 3 | 175 | /4 | -85 %, recharge à 80 % | 30 % |
+| 4 | 195 | /4 (attaques normales) | annulées | 40 % |
+| 5 | 245 | /4 (attaques normales) | annulées | 50 % |
+Entrée : effet complet en 0,25 s. Sortie : retour progressif en environ 1,4 s. Pulsation toutes les 1,2 s : 2 à 4 dégâts.
+
+### Bombes (bouton de capacité)
+Munitions illimitées (le stock reste 5/5), cadence : 0,9 s, 1,1 s, 1,3 s, 1,5 s, 2,2 s selon le niveau. L'aura reste active. Dégâts : principale / secondaire / finale (rayon).
+- N1 bombe simple : 30 (72), explose au sol ou au contact d'un adversaire.
+- N2 : 16 (62), 3 secondaires à 14 (56).
+- N3 : 14 (60), 4 secondaires à 11 (52), 8 finales à 9 (46). Total 13 explosions.
+- N4 : 14 (60), 5 secondaires à 11 (52), 15 finales à 9 (44). Total 21 explosions.
+- N5 giga bombe : 3 rebonds puis explosion 42 (125), 5 secondaires qui rebondissent 3 fois, 22 (82), 10 finales qui rebondissent 3 fois, 16 (66). Total 16 explosions, rien après.
+Une chaîne ne blesse pas deux fois la même cible dans le même instant (0,12 s). Pas de dégâts au porteur ni aux alliés. Murs et maisons arrêtent ou font rebondir les bombes, une explosion ne traverse pas les murs d'une maison.
+
+### Tests réellement passés (Chromium headless, jeu réel)
+Aura sans appui sur le bouton aux 5 niveaux ; porteur et allié jamais affectés ; hors zone aucun effet ; ralentissement mesuré 0,9 / 0,8 / 0,7 / 0,6 / 0,5 ; dégâts /2 /3 /4 /4 /4 mesurés ; capacités annulées seulement aux niveaux 4 et 5 ; retour progressif à la sortie ; bouton = bombe, pas de double lancement immédiat, aura intacte ; 20 lancements sans baisse de stock ; fragmentation exacte aux 5 niveaux (1 / 1+3 / 1+4+8 / 1+5+15 / 1+5+10) avec plus aucune bombe ensuite ; niveau 5 : les 16 bombes ont rebondi exactement 3 fois avant d'exploser ; dégâts sur adversaire dans l'aura, aucun sur porteur ni allié ; pas de double coup ; maison (tirs à travers le mur) ; 70 s avec bots Annulation niveaux 1 à 5 sur les 3 arènes, 0 erreur, moyenne 0,2 à 0,4 ms par mise à jour ; régressions précédentes.
+
+### Limites
+Pas de test multijoueur réel ni sur téléphone. Les bombes et l'aura sont calculées par le même moteur pour tous, mais la synchronisation réseau n'a pas pu être vérifiée. Un "rebond" = 3 rebonds au sol puis explosion au 4e contact. Les invocations déjà posées par un ennemi (golem, tourelles) ne sont pas annulées, seules ses capacités le sont. Valeurs d'équilibrage à valider.

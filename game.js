@@ -530,7 +530,7 @@
       f.armT = Math.max(0, (f.armT || 0) - dt); f.castT = Math.max(0, (f.castT || 0) - dt);
       if (f.eat) { f.eat.t += dt; if (f.eat.t >= f.eat.dur) f.eat = null; }
       f.hurtT = Math.max(0, f.hurtT - dt); f.flash = Math.max(0, f.flash - dt); f.bombCd = Math.max(0, f.bombCd - dt); f.t += dt;
-      for (const ab of f.slots) if (ab) { if (ab.gap > 0) ab.gap -= dt; WB.tickCharges(ab, dt); }
+      for (const ab of f.slots) if (ab) { if (ab.gap > 0) ab.gap -= dt; WB.tickCharges(ab, dt * (WB.cnRate ? WB.cnRate(f) : 1)); }
       if (f.kind === 'thrall' || f.kind === 'golem') { f.life -= dt; if (f.life <= 0 || !f.owner.alive) { G.kill(f, null, null); return; } }
       if (f.swallowed) { const sw = f.swallowed; if (!sw.by.alive) G.spit(sw.by); else { f.x = sw.by.x; f.y = sw.by.y; f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; } }
       if (f.sharkHold) { f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; }
@@ -545,6 +545,7 @@
       if (f.thrall) { const th = f.thrall; th.t -= dt; if (!th.owner || !th.owner.alive || (th.phase === 1 ? th.t <= 0 : th.t <= 0)) { G.release(f); } }
       const canMove = !(st.frozen > 0 || st.stun > 0 || st.root > 0 || st.jump || f.dash || f.seqLock) && G.started;
       let sp = f.speed; if (st.slowT > 0) sp *= 1 - (st.slowAmt || 0.4) * (st.slowT / (st.slowMax || 1));
+      if (f.cn && WB.cnSlow) sp *= 1 - WB.cnSlow(f);
       const inWater = W.isWaterAt(f.x, f.y) && !st.jump; if (inWater) sp *= 0.4;
       const mvx = canMove ? f.want.x * sp : 0, mvy = canMove ? f.want.y * sp : 0;
       const a = Math.min(1, dt * 14); f.vx += (mvx - f.vx) * a; f.vy += (mvy - f.vy) * a;
