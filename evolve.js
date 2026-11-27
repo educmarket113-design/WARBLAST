@@ -720,7 +720,7 @@ WB.GUIDE.ice = ['Myrtilles givrées', 'Gel, piques de glace et piège.', ['Une z
   // niveaux 1 à 4 : [rayon d'aspiration, rayon du centre, nombre d'ennemis à absorber] ; niveau 5 : suit le joueur
   const T = { 1: [100, 38, 1], 2: [130, 44, 2], 3: [145, 48, 3], 4: [160, 52, 4], 5: [150, 62, 99] };
   const LIFE = { 1: 8, 2: 20, 3: 20, 4: 20, 5: 4 };      // secondes d'attente (niveaux 1 à 4) ; durée d'activation (niveau 5)
-  H.cd = function (L) { return L >= 5 ? 26 : 18; };        // recharge après 2 utilisations
+  H.cd = function (L) { return 5; };        // recharge de chaque charge : 5 s (modifié le 27/11, avant 18 s niveaux 1-4 et 26 s niveau 5)
   H.range = function (L) { return L >= 5 ? T[5][0] : 280; };
   H.desc = 'Niv.1 : absorbe 1 ennemi puis se referme. Niv.2 à 4 : reste ouvert jusqu\'à 2, 3 ou 4 ennemis absorbés. Niv.5 : suit le joueur 4 s et absorbe tout ce qui entre. 2 utilisations avant recharge.';
   H.ai = { max: function (L) { return L >= 5 ? 160 : 300; }, min: 0 };

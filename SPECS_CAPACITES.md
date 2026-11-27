@@ -294,3 +294,29 @@ Niveaux 1-2 un seul atterrissage sans cratère ; niveaux 3, 4, 5 : 2, 3, 3 atter
 
 ### Limites
 Pas de test multijoueur ni sur téléphone. Interprétation à valider : « à chaque atterrissage » = plusieurs atterrissages à enchaîner à partir du niveau 3 (2, 3, 3). Si tu veux un seul atterrissage, il suffit de changer un nombre. Les ondes du niveau 1 et 2 gardent le comportement d'avant (elles passent encore à travers les murs de maison, comme avant).
+
+## Invocation : requin, golem, dragon, niveaux 1 à 5 (27/11), en attente de validation
+
+Trois variantes indépendantes, choisies avec le sélecteur de forme existant ; la variante reste fixe pendant la progression. Fichiers : `invoc_art.js` (dessins), `invoc.js` (socle, golems, bras, colosse, titan), `invoc_shark.js`, `invoc_dragon.js`. Un coup par cible et par animation (clé de dédoublonnage par entité). Les attaques respectent les murs de maison.
+
+REQUIN (nage sous terre dans une flaque magique, ne marche jamais, invocation instantanée)
+- N1 : petite flaque, mord le plus proche, 30 dégâts + ralentissement 30 % pendant 2,5 s.
+- N2 : flaque R120, aileron qui poursuit, morsure 36 + projection + immobilisation 0,5 s.
+- N3 : trois flaques, trois requins qui jaillissent à la suite (morsure 28, charge 24, tournoiement 22 qui repousse).
+- N4 : immense flaque R190, tourbillon qui attire ~2,4 s, mâchoire qui se ferme : 90 près du centre, 35 ailleurs.
+- N5 : R270. La chasse (3,2 s, aileron), la rupture (5 mâchoires simultanées, 42), le grand engloutissement (balayage circulaire + vague, 80, stun 0,8 s).
+
+GOLEM (pierre, PV propres, définitivement détruit à 0 PV, pas de réapparition)
+- N1 : trois petits golems (90 PV), coups avec onde de choc.
+- N2 : golem protecteur (320 PV), s'interpose devant les projectiles visant le joueur, alterne défense et attaque.
+- N3 : deux bras de pierre, structures à 150 PV. Bras 1 : frappe + onde. Bras 2 : surgit sous un ennemi, l'attrape et le lance.
+- N4 : colosse (620 PV), marteau de pierre (48), effondrement sous 30 % de PV ou à la mort : 9 rochers (34 chacun).
+- N5 : titan (1000 PV), cycle : piliers dévastateurs, écrasement tectonique (fissures + piliers), prison du titan (8 murs à 110 PV qui se referment, 60).
+
+DRAGON (tête seule sortant du sol, durée limitée, replongée progressive, sans PV)
+- Couleurs : N1 marron, N2 jaune doré, N3 rouge, N4 blanc, N5 noir, taille croissante. Durées : 9 / 10 / 11 / 12 / 16 s.
+- N1 griffes, N2 rangée de crocs avec projection, N3 queue fantôme + morsure simultanée, N4 cage de côtes puis mâchoire (80), N5 les mille griffes, mâchoire abyssale, rugissement de l'extinction, flammes noires (taches au sol 6 s qui s'estompent, 9 dégâts toutes les 0,5 s, ne gênent pas l'invocateur).
+
+TROU NOIR : recharge de chaque charge passée à 5 s dans `evolve.js` (`H.cd`), source unique du compteur, du bouton et de l'IA. Valeurs d'origine réelles : 18 s (niveaux 1 à 4) et 26 s (niveau 5), pas 10 s.
+
+Valeurs (PV, dégâts, durées, seuil 30 % du colosse) : interprétations à valider.

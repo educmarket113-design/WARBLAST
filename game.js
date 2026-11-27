@@ -438,6 +438,7 @@
       return null;
     }
     function prefDist(f) {
+      if (f.iv && f.iv.pref) return f.iv.pref;
       let ranged = false, any = false; for (const s of f.slots) if (s) { any = true; if (!MELEE[s.id]) ranged = true; }
       if (ranged) return 230; if (any) return 95; return 210;
     }
@@ -496,7 +497,7 @@
       if (casts === 0 && (f.bombs > 0 || f.dome) && f.bombCd <= 0 && d > 110 && d < 390 && Math.random() < 0.5) G.throwBomb(f, aimAt(f, t, null, { range: () => 400 }));
     }
     function aiThink(f, dt) {
-      const ai = f.ai; if (f.cl && f.cl.own) return; ai.thinkT -= dt; ai.wanderT -= dt;
+      const ai = f.ai; if (f.cl && f.cl.own) return; if (f.iv && WB.invAI && WB.invAI(f, dt)) return; ai.thinkT -= dt; ai.wanderT -= dt;
       if (!G.started) { f.want.x = f.want.y = 0; return; }
       if (ai.thinkT <= 0) { ai.thinkT = f.kind === 'minion' ? 0.4 + Math.random() * 0.2 : 0.22 + Math.random() * 0.12; decide(f); if (ai.target) aiAttack(f); }
       let dx = 0, dy = 0; const t = ai.target;
@@ -538,7 +539,7 @@
       f.glutBig = f.slots.some(x => x && x.id === 'glut' && !x.stolen);
       // les 10 bombes normales ne se régénèrent jamais (spécification Invisibilité)
       for (const x of f.slots) if (x && x.id === 'summon' && !x.form) { if (f === G.player) { if (!G.formPrompt) G.formPrompt = { ab: x, t: 10 }; } else x.form = ['shark', 'golem', 'dragon'][(Math.random() * 3) | 0]; }
-      if (f.kind === 'golem' && !f.cl) { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }
+      if (f.kind === 'golem' && !f.cl && !f.iv) { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }
       tickDots(f, dt); if (!f.alive) return;
       if (f.necro) { f.necro.t -= dt; if (f.necro.t <= 0) f.necro = null; }
       if (f.kind === 'player' && !f.thrall) playerInput(f, dt); else aiThink(f, dt);
@@ -645,7 +646,7 @@
       for (let i = G.turrets.length - 1; i >= 0; i--) {
         const tu = G.turrets[i]; tu.life -= dt; tu.cd -= dt; tu.flash = Math.max(0, (tu.flash || 0) - dt);
         if (tu.life <= 0) { if (tu.adv && WB.turretEnd) WB.turretEnd(tu); G.turrets.splice(i, 1); continue; }
-        if (tu.adv) continue;
+        if (tu.adv || tu.inv) continue;
         if (tu.dragon) {
           let best = null, bd = 340; for (const t of G.F) { if (!t.alive || t.team === tu.owner.team || t.st.jump || t.ghost || t.st.invis > 0) continue; const d = Math.hypot(t.x - tu.x, t.y - tu.y); if (d < bd && W.los(tu.x, tu.y, t.x, t.y)) { bd = d; best = t; } }
           if (best) { tu.ang = Math.atan2(best.y - tu.y, best.x - tu.x); if (tu.cd <= 0) { tu.cd = 1.0; const L = tu.L; G.proj({ x: tu.x + Math.cos(tu.ang) * 26, y: tu.y + Math.sin(tu.ang) * 26, dx: Math.cos(tu.ang), dy: Math.sin(tu.ang), speed: 520, life: 0.7, r: 14, owner: tu.owner, ab: 'summon', lvl: L, kind: 'fire', onHit(p, t) { G.damage(t, 9 + 3 * L, tu.owner, 'summon'); G.burn(t, 14 + 6 * L, 3.5, tu.owner, 'summon'); G.fx('burst', p.x, p.y, { col: '#ff9a3c', n: 8, life: 0.4 }); return true; } }); G.sfx('fire'); tu.fireT = 0.3; } }
@@ -876,6 +877,7 @@
     const a = 0.3 + 0.3 * Math.sin(time * 14); ctx.strokeStyle = 'rgba(255,60,90,' + a + ')'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(c.x, c.y, 22 + (6 - c.life) * 1.5, 0, PI2); ctx.stroke();
   }
   function drawTurret(ctx, t, time) {
+    if (t.inv) return WB.drawInvStruct(ctx, t, time);
     if (t.dragon) return WB.drawDragon(ctx, t, time);
     if (t.adv) return WB.drawAdvTurret(ctx, t, time);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.beginPath(); ctx.ellipse(t.x + 4, t.y + 10, 20, 8, 0, 0, PI2); ctx.fill();
@@ -892,6 +894,7 @@
     ctx.fillStyle = '#ff4a5a'; ctx.beginPath(); ctx.arc(11, -3, 2, 0, PI2); ctx.arc(11, 3, 2, 0, PI2); ctx.fill(); ctx.restore();
   }
   function drawWall(ctx, w) {
+    if (w.draw) return w.draw(ctx, w);
     if (w.grp && WB.drawWallBlock) return WB.drawWallBlock(ctx, w);
     ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(w.x - w.w / 2 + 6, w.y - w.h / 2 + 8, w.w, w.h);
     ctx.fillStyle = w.flash > 0 ? '#fff' : '#a89478'; ctx.strokeStyle = '#4a3a28'; ctx.lineWidth = 3; ctx.fillRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h); ctx.strokeRect(w.x - w.w / 2, w.y - w.h / 2, w.w, w.h);
