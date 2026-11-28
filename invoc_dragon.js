@@ -41,15 +41,17 @@
 
   // ---------- la tête ----------
   function summon(g, f, L, aim) {
-    for (const e of g.inv || []) if (e.dr && e.f === f) { e.sink = true; if (e.sinkT == null) e.sinkT = e.t; }
+    // session : jusqu'à 5 dragons simultanés par joueur ; à la 6e activation les 5 anciens (de ce joueur seulement) rentrent sous terre
+    const S = WB.SES.begin(g, f, 'dragon', 5, function (sid) { for (const e of g.inv || []) if (e.dr && e.f === f && e.ses === sid && !e.sink) { e.sink = true; e.sinkT = e.t; e.T = Math.min(e.T, e.t); } });
     const foes = INV.nearest(g, f, 420), t0 = foes[0];
     const dir = t0 ? ptr(f, t0) : { x: aim.x, y: aim.y };
-    const p = floor(g, f.x + dir.x * (80 + 26 * L), f.y + dir.y * (80 + 26 * L));
+    const off = ((S.idx + 1) >> 1) * (S.idx % 2 ? 1 : -1) * (70 + 34 * L), px0 = f.x + dir.x * (80 + 26 * L) - dir.y * off, py0 = f.y + dir.y * (80 + 26 * L) + dir.x * off;
+    const p = floor(g, px0, py0);
     f.armT = 0.4; g.sfx('wall'); g.shake(3 + L);
     const K = IA.DRAGON_SCALE[L - 1];
     g.fx('ring', p.x, p.y, { r: 60 * K, col: '#a08060', life: 0.5, w: 6 }); g.fx('burst', p.x, p.y, { col: '#7a5a3a', n: 16, life: 0.7 });
     const D = INV.add(g, {
-      dr: true, f: f, L: L, x: p.x, y: p.y, face: dir.x >= 0 ? 1 : -1, T: TIME[L - 1], cd: 1.2, busy: 0, open: 0, roar: 0, lunge: 0, lungeV: 0, sink: false, sinkT: null, pick: 0,
+      dr: true, f: f, L: L, abil: 'summon', ses: S.id, x: p.x, y: p.y, face: dir.x >= 0 ? 1 : -1, T: TIME[L - 1], cd: 1.2, busy: 0, open: 0, roar: 0, lunge: 0, lungeV: 0, sink: false, sinkT: null, pick: 0,
       update(g2, e, dt) {
         e.t += dt; e.busy = Math.max(0, e.busy - dt); e.roar = Math.max(0, e.roar - dt * 1.5);
         e.open += ((e.busy > 0 ? 1 : 0.15) - e.open) * Math.min(1, dt * 9); e.lunge += (e.lungeV - e.lunge) * Math.min(1, dt * 12);

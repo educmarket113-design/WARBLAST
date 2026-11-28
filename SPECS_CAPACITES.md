@@ -320,3 +320,17 @@ DRAGON (tête seule sortant du sol, durée limitée, replongée progressive, san
 TROU NOIR : recharge de chaque charge passée à 5 s dans `evolve.js` (`H.cd`), source unique du compteur, du bouton et de l'IA. Valeurs d'origine réelles : 18 s (niveaux 1 à 4) et 26 s (niveau 5), pas 10 s.
 
 Valeurs (PV, dégâts, durées, seuil 30 % du colosse) : interprétations à valider.
+
+## Voleur (capacité « glut »), refonte des golems, sessions d'invocation (28/11), en attente de validation
+
+VOLEUR (`thief.js`, remplace l'ancien « avale et recrache »), passif, sans bouton
+- N1 : portée 340 px, une dague toutes les 0,15 s sur une seule cible. Dégâts croissants par dague qui touche la même cible (3,4 + 1,3 par dague déjà reçue, plafonné à 9 dagues, soit 15 dégâts). La série retombe si la cible n'est plus touchée pendant 2 s. Une dague bloquée par un mur ne blesse pas et ne fait pas monter le compteur.
+- N2 : toutes les cibles de la zone reçoivent leurs dagues, compteurs indépendants. Cadence globale ralentie de 18 % par cible en plus, plafonnée à 4 cibles (une dague toutes les 0,23 s au pire). Toucher ou cliquer un ennemi le verrouille (cadence initiale retrouvée, les autres sont libérés) ; recliquer le déverrouille. Jauge de tourbillon (+6 % par impact réel). À 100 % : téléportation au contact de la cible, étourdissement (2,6 s réduit par la résistance de la cible, qui dépend de son niveau et de ses PV max), tourbillon de 3,2 s avec deux dagues, coups toutes les 0,2 s. Le tourbillon va toujours jusqu'au bout, même si la cible s'échappe ou meurt.
+- N3 : à une élimination, vole la capacité principale (la plus haute) de l'éliminé, une seule.
+- N4 : cible unique automatique (la plus proche, enchaîne), vole toutes les capacités à leur niveau d'origine et récupère la totalité des PV de l'éliminé en soin.
+- N5 : le joueur choisit dans un panneau la capacité à voler (12 s, premier choix par défaut), utilisable au niveau 5 quel que soit le niveau du voleur. Les bots prennent la meilleure.
+- Les capacités volées s'ajoutent (5 au maximum, la plus ancienne est remplacée au-delà) et fonctionnent avec le vrai comportement de la capacité d'origine. Elles sont perdues à la mort, comme toutes les capacités du jeu.
+
+GOLEMS : nouvelle construction visuelle (`invoc_art.js`) : tête, épaules, torse, deux bras séparés du corps avec coude et poignet, mains à doigts, bassin, deux jambes avec genoux et pieds distincts. Échelles réduites (0,7 / 1,1 / 1,5 / 2,0 au lieu de 0,85 / 1,55 / 2,1 / 2,9). PV, dégâts et comportements inchangés.
+
+SESSIONS D'INVOCATION (`WB.SES` dans `invoc.js`) : chaque élément porte propriétaire, capacité d'origine, numéro de session, état et durée. Dragon : chaque activation ajoute un dragon sans retirer les autres, 5 au maximum par joueur ; à la 6e activation les 5 anciens (de ce joueur seulement) rentrent sous terre, puis le nouveau apparaît. Chaque dragon garde sa durée. Requin (instantané), tourelle (plafond propre) et les autres capacités ne sont pas touchés.

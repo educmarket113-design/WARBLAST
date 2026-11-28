@@ -246,7 +246,7 @@
       }
       const p = W.nearFloor(best.x, best.y, 2); f.x = p.x; f.y = p.y;
       f.alive = true; f.hp = f.maxhp; f.st = { invuln: 2.2 }; f.dots = []; f.vx = f.vy = 0; f.beacon = null; f.dash = null; f.drown = 0;
-      if (f.fixed) f.fixed.forEach((s, i) => { f.slots[i] = WB.newAbility(s[0], s[1]); }); else f.slots = new Array(f.slots.length).fill(null);
+      f.slots = f.slots.filter(s => !(s && s.stolen)); if (f.th) { f.th.whirl = null; f.th.gauge = 0; f.th.lock = null; f.th.cnt = {}; } if (f.fixed) f.fixed.forEach((s, i) => { f.slots[i] = WB.newAbility(s[0], s[1]); }); else f.slots = new Array(f.slots.length).fill(null);
       if (f.ai) { f.ai.target = null; f.ai.path = null; }
       G.fx('ring', f.x, f.y, { r: 50, col: '#fff', life: 0.5, w: 5 });
     }
@@ -536,7 +536,7 @@
       if (f.swallowed) { const sw = f.swallowed; if (!sw.by.alive) G.spit(sw.by); else { f.x = sw.by.x; f.y = sw.by.y; f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; } }
       if (f.sharkHold) { f.vx = f.vy = 0; f.want.x = f.want.y = 0; return; }
       if (f.swallow) { f.swallow.t -= dt; if (f.swallow.t <= 0 || !f.swallow.v.alive) G.spit(f); }
-      f.glutBig = f.slots.some(x => x && x.id === 'glut' && !x.stolen);
+      f.glutBig = false;
       // les 10 bombes normales ne se régénèrent jamais (spécification Invisibilité)
       for (const x of f.slots) if (x && x.id === 'summon' && !x.form) { if (f === G.player) { if (!G.formPrompt) G.formPrompt = { ab: x, t: 10 }; } else x.form = ['shark', 'golem', 'dragon'][(Math.random() * 3) | 0]; }
       if (f.kind === 'golem' && !f.cl && !f.iv) { f.stoneT -= dt; const tg = f.ai.target; if (tg && tg.alive && !tg.ghost && G.started && f.stoneT <= 0 && dist(f, tg) < 430) { const d = dist(f, tg) || 1, L = f.golemL; f.stoneT = 1.6 - 0.1 * L; f.face.x = (tg.x - f.x) / d; f.face.y = (tg.y - f.y) / d; G.proj({ x: f.x, y: f.y - 10, dx: f.face.x, dy: f.face.y, speed: 520, life: 0.85, r: 12, owner: f.owner, ab: 'summon', lvl: L, kind: 'stone', onHit(p, t) { G.damage(t, 12 + 4 * L, f.owner, 'summon'); G.knock(t, p.dx || 0, p.dy || 0, 160); G.fx('burst', p.x, p.y, { col: '#9a9fac', n: 8, life: 0.4 }); return true; } }); G.sfx('wall'); f.throwT = 0.25; } f.throwT = Math.max(0, (f.throwT || 0) - dt); }

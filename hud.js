@@ -324,6 +324,14 @@
       for (let i = 0; i < 3; i++) btn(px0 + i * (pw + 10), py0, pw, 100, { style: 'dark', instant: true, fn: (function (k) { return function () { fp.ab.form = k; G.formPrompt = null; WB.snd.play('pickup'); }; })(forms[i][0]), draw: function (cx, cy) { WB.drawIcon(ctx, forms[i][0], cx, cy - 8, 52); text(String(7 + i), cx, cy + 36, 13, '#4adcc8', 'center', 3); } });
       ctx.strokeStyle = '#4adcc8'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W / 2, py0 - 28, 10, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(fp.t / 10, 0, 1)); ctx.stroke();
     }
+    // choix de la capacité à voler (Voleur niveau 5)
+    if (G.stealPick && WB.THIEF) {
+      const sp = G.stealPick, n = sp.opts.length, pw = 66, gp = 8, tot = n * pw + (n - 1) * gp, px0 = W / 2 - tot / 2, py0 = H * 0.1 + 14;
+      panel(px0 - 14, py0 - 38, tot + 28, 150, { r: 16, stroke: '#ff8ad0' });
+      text('Choisis la capacité à voler (niveau 5)', W / 2, py0 - 20, 14, '#ffd0e4', 'center', 3);
+      for (let i = 0; i < n; i++) btn(px0 + i * (pw + gp), py0, pw, 96, { style: 'dark', instant: true, fn: (function (k) { return function () { WB.THIEF.pick(k); }; })(i), draw: function (cx, cy) { WB.drawIcon(ctx, sp.opts[i].id, cx, cy - 10, 44); text(A[sp.opts[i].id] ? A[sp.opts[i].id].name : sp.opts[i].id, cx, cy + 32, 10, '#ff8ad0', 'center', 3); } });
+      ctx.strokeStyle = '#ff8ad0'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(W / 2, py0 - 44, 8, -Math.PI / 2, -Math.PI / 2 + PI2 * clamp(sp.t / 12, 0, 1)); ctx.stroke();
+    }
     if (f.swallowed) { panel(W / 2 - 130, H * 0.1, 260, 36, { r: 14, stroke: '#ff8ad0' }); text("Tu es avalé", W / 2, H * 0.1 + 19, 16, '#ffd0e4', 'center', 3); }
     // ---- capacités (extrême droite), stick d'attaque toujours visible, bombe ----
     const n = f.slots.length, sw = 54, gap = 8, rowH = sw + 18, M = 14, bs = 64, R = 76;

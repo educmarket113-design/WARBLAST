@@ -240,36 +240,56 @@
 
   // ---------- golem : créature de pierre élémentaire ----------
   // o = { L (niveau), punch (0..1), hammer (0..1 : phase), hp01, moving, walk, hit, shield, core }
+  // golem reconstruit (28/11) : membres séparés (bras écartés du torse, jambes et pieds distincts), articulations visibles
   IA.golem = function (c, x, y, s, o, time, seed) {
     c.save(); c.translate(x, y); c.scale(s, s);
-    const bob = Math.sin(time * (o.moving ? 5 : 1.8) + seed) * (o.moving ? 3 : 1.2), L = o.L || 1, big = L >= 4, flash = o.hit > 0;
+    const L = o.L || 1, mv = o.moving, ph = time * 5, flash = o.hit > 0, pn = o.punch || 0, hm = o.hammer || 0;
     const hi = flash ? '#fff' : ST.hi, md = flash ? '#fff' : ST.mid, lo = flash ? '#fff' : ST.lo;
-    c.fillStyle = 'rgba(0,0,0,0.32)'; c.beginPath(); c.ellipse(0, 26, 40, 12, 0, 0, PI2); c.fill();
-    // jambes courtes et puissantes
-    for (const sx of [-1, 1]) { const st = o.moving ? Math.sin(time * 5 + (sx > 0 ? 0 : Math.PI)) * 4 : 0; IA.rock(c, sx * 16, 14 + st * 0.5, 14, 14, seed + sx, md); IA.rock(c, sx * 16, 24 + st, 17, 7, seed + 5 + sx, lo); }
-    c.translate(0, bob);
-    // torse : blocs empilés
-    IA.rock(c, 0, -2, 32, 26, seed + 1, md); IA.rock(c, -14, -8, 17, 17, seed + 2, hi); IA.rock(c, 15, -4, 16, 18, seed + 3, lo); IA.rock(c, 0, -22, 26, 14, seed + 4, hi);
-    IA.crack(c, [[-18, -14], [-8, -6], [-12, 6], [-4, 14]], 2.2, ST.glow, 0.9); IA.crack(c, [[14, -18], [8, -6], [16, 4]], 2, ST.glow, 0.8);
-    if (L >= 5) { // noyau lumineux dans la poitrine
-      const pu = 0.7 + 0.3 * Math.sin(time * 3); const g = c.createRadialGradient(0, -6, 1, 0, -6, 18); g.addColorStop(0, '#fff7d0'); g.addColorStop(0.4, '#ffb347'); g.addColorStop(1, 'rgba(255,120,20,0)'); c.globalAlpha = pu; c.fillStyle = g; c.beginPath(); c.arc(0, -6, 18, 0, PI2); c.fill(); c.globalAlpha = 1;
-      c.fillStyle = '#fff3b0'; c.beginPath(); c.arc(0, -6, 5, 0, PI2); c.fill(); IA.rock(c, -22, -26, 12, 10, seed + 9, lo); IA.rock(c, 22, -24, 12, 10, seed + 10, lo);
-    }
-    // tête imposante
-    IA.rock(c, 0, -40, 20, 17, seed + 6, hi); c.fillStyle = '#1c1a20'; path(c, [[-12, -34], [12, -34], [9, -29], [-9, -29]]); c.fill();
-    c.fillStyle = '#e8e0c8'; for (let i = 0; i < 4; i++) { path(c, [[-8 + i * 5, -34], [-6 + i * 5, -30], [-4 + i * 5, -34]]); c.fill(); }
-    const eyc = L >= 5 ? '#ffe9a0' : '#ffb347'; c.shadowColor = eyc; c.shadowBlur = 10; c.fillStyle = eyc; for (const sx of [-1, 1]) { path(c, [[sx * 11 - 4, -46], [sx * 11 + 5, -44], [sx * 11 + 2, -40], [sx * 11 - 6, -41]]); c.fill(); } c.shadowBlur = 0;
-    // bras très épais et grandes mains rocheuses
-    const pn = o.punch || 0, hm = o.hammer || 0;
+    const jt = function (px, py, r) { c.fillStyle = flash ? '#fff' : '#2a2832'; c.strokeStyle = ST.line; c.lineWidth = 1.5; c.beginPath(); c.arc(px, py, r, 0, PI2); c.fill(); c.stroke(); };
+    c.fillStyle = 'rgba(0,0,0,0.32)'; c.beginPath(); c.ellipse(0, 31, 36, 9, 0, 0, PI2); c.fill();
+    // jambes : cuisse, genou, tibia, pied (deux jambes bien séparées)
     for (const sx of [-1, 1]) {
-      const swing = sx > 0 ? pn : 0, ax = sx * 36 + sx * swing * 4, ay = -10 + (o.moving ? Math.sin(time * 5 + sx) * 3 : 0) - swing * 24;
-      if (L >= 4 && sx > 0 && hm > 0) continue; // le bras droit tient le marteau
-      IA.rock(c, sx * 30, -16, 13, 14, seed + 20 + sx, md); IA.rock(c, ax, ay + 8, 15, 18, seed + 21 + sx, hi); IA.rock(c, ax + sx * 2, ay + 26 - swing * 10, 19, 17, seed + 22 + sx, md);
-      IA.crack(c, [[ax - 4, ay], [ax + 2, ay + 10], [ax - 2, ay + 18]], 1.8, ST.glow, 0.8);
+      const w = mv ? Math.sin(ph + (sx > 0 ? 0 : Math.PI)) : 0, lift = Math.max(0, w) * 5, sw = w * 3;
+      IA.rock(c, sx * 14, 9 - lift * 0.3, 9, 9, seed + sx, md); jt(sx * 14, 16 - lift * 0.5, 3.4);
+      IA.rock(c, sx * 14, 22 - lift * 0.7 + sw * 0.2, 7, 7.5, seed + 3 + sx, lo);
+      IA.rock(c, sx * 15, 29.5 - lift + sw, 11, 4.6, seed + 7 + sx, md);
+      c.strokeStyle = ST.line; c.lineWidth = 1.4; c.beginPath(); c.moveTo(sx * 15 - 3, 28 - lift + sw); c.lineTo(sx * 15 - 3, 32 - lift + sw); c.moveTo(sx * 15 + 3, 28 - lift + sw); c.lineTo(sx * 15 + 3, 32 - lift + sw); c.stroke();
     }
-    if (o.shield) { c.save(); c.globalAlpha = 0.5; c.fillStyle = '#9fd0ff'; c.beginPath(); c.arc(0, -8, 54, 0, PI2); c.fill(); c.restore(); }
+    c.translate(0, (mv ? Math.sin(ph * 2 + seed) * 1.6 : Math.sin(time * 1.8 + seed) * 0.9));
+    // bassin, ventre, torse (en V) et plaques latérales
+    IA.rock(c, 0, 2, 14, 6, seed + 1, lo); IA.rock(c, 0, -5, 9, 6.5, seed + 2, md);
+    IA.rock(c, 0, -17, 18, 12, seed + 3, hi); IA.rock(c, -12, -14, 7, 9, seed + 4, lo); IA.rock(c, 12, -14, 7, 9, seed + 5, lo);
+    IA.crack(c, [[-9, -22], [-3, -15], [-7, -8]], 2, ST.glow, 0.85); IA.crack(c, [[8, -21], [4, -14], [9, -9]], 1.8, ST.glow, 0.75);
+    if (L >= 2) { IA.rock(c, 0, -16, 9, 7, seed + 6, md); c.fillStyle = L >= 5 ? '#fff3b0' : '#9fd0ff'; c.globalAlpha = 0.8; c.beginPath(); c.moveTo(0, -20); c.lineTo(3, -16); c.lineTo(0, -12); c.lineTo(-3, -16); c.closePath(); c.fill(); c.globalAlpha = 1; }
+    if (L >= 5) { const pu = 0.7 + 0.3 * Math.sin(time * 3), g = c.createRadialGradient(0, -16, 1, 0, -16, 16); g.addColorStop(0, '#fff7d0'); g.addColorStop(0.4, '#ffb347'); g.addColorStop(1, 'rgba(255,120,20,0)'); c.globalAlpha = pu; c.fillStyle = g; c.beginPath(); c.arc(0, -16, 16, 0, PI2); c.fill(); c.globalAlpha = 1; }
+    if (L === 1) { c.fillStyle = '#5c8a4a'; c.globalAlpha = 0.85; c.beginPath(); c.ellipse(-7, -23, 5, 2.2, -0.3, 0, PI2); c.fill(); c.globalAlpha = 1; }
+    // épaules : pauldrons séparés de la tête, articulation visible
+    for (const sx of [-1, 1]) {
+      IA.rock(c, sx * 26, -25, L >= 2 ? 11 : 9, L >= 2 ? 8.5 : 7.5, seed + 10 + sx, hi); jt(sx * 26, -17, 3.8);
+      if (L >= 4) { c.fillStyle = lo; c.strokeStyle = ST.line; c.lineWidth = 1.5; path(c, [[sx * 22, -30], [sx * 27, -42], [sx * 31, -29]]); c.fill(); c.stroke(); }
+      if (L >= 5) IA.rock(c, sx * 30, -31, 7, 5, seed + 12 + sx, md);
+    }
+    // bras : épaule, bras, coude, avant-bras, poing à doigts de pierre ; écartés du torse
+    for (const sx of [-1, 1]) {
+      if (L >= 4 && sx > 0 && hm > 0) continue;
+      const sw = sx > 0 ? pn : 0, w = mv ? Math.sin(ph + (sx > 0 ? Math.PI : 0)) * 3 : 0, bx = sx * 33 + sx * sw * 4, up = sw * 12;
+      IA.rock(c, bx, -9 + w - up * 0.5, 7.5, 11, seed + 20 + sx, md); jt(bx + sx, 3 + w - up, 3.4);
+      IA.rock(c, bx + sx * 2, 12 + w * 1.2 - up * 1.4, 7.5, 9.5, seed + 22 + sx, lo);
+      const hx = bx + sx * 3, hy = 24 + w * 1.4 - sw * 28;
+      IA.rock(c, hx, hy, 10.5, 9, seed + 24 + sx, hi);
+      for (let i = -1; i <= 1; i++) IA.rock(c, hx + i * 5.5, hy + 8, 3.4, 3.8, seed + 30 + i + sx * 4, md);
+      IA.crack(c, [[bx - 3, -14 + w], [bx + 2, -6 + w], [bx - 1, 2 + w]], 1.6, ST.glow, 0.75);
+    }
+    // cou, tête plus petite, yeux incandescents, mâchoire
+    jt(0, -30, 3.6); IA.rock(c, 0, -38, 12.5, 10.5, seed + 6, hi);
+    if (L >= 4) { c.fillStyle = lo; c.strokeStyle = ST.line; c.lineWidth = 1.5; for (const sx of [-1, 1]) { path(c, [[sx * 7, -45], [sx * 12, -57], [sx * 12, -43]]); c.fill(); c.stroke(); } }
+    if (L >= 5) { c.fillStyle = md; c.strokeStyle = ST.line; c.lineWidth = 1.4; for (const dx of [-4, 0, 4]) { path(c, [[dx - 2, -47], [dx, -56], [dx + 2, -47]]); c.fill(); c.stroke(); } }
+    c.fillStyle = '#1c1a20'; path(c, [[-8, -34], [8, -34], [6, -31], [-6, -31]]); c.fill();
+    c.fillStyle = '#e8e0c8'; for (let i = 0; i < 3; i++) { path(c, [[-5 + i * 4, -34], [-3 + i * 4, -31.5], [-1 + i * 4, -34]]); c.fill(); }
+    const eyc = L >= 5 ? '#ffe9a0' : '#ffb347'; c.shadowColor = eyc; c.shadowBlur = 8; c.fillStyle = eyc; for (const sx of [-1, 1]) { path(c, [[sx * 6 - 3, -41], [sx * 6 + 3.5, -40], [sx * 6 + 1.5, -37], [sx * 6 - 4, -38]]); c.fill(); } c.shadowBlur = 0;
+    if (o.shield) { c.save(); c.globalAlpha = 0.5; c.fillStyle = '#9fd0ff'; c.beginPath(); c.arc(0, -8, 50, 0, PI2); c.fill(); c.restore(); }
     c.restore();
-    if (o.hp01 != null && o.hp01 < 1.001) { const w = 46 * s, yy = y - 62 * s; c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, yy, w, 6); c.fillStyle = o.hp01 > 0.35 ? '#7cff9a' : '#ff6a5a'; c.fillRect(x - w / 2 + 1, yy + 1, (w - 2) * Math.max(0, o.hp01), 4); }
+    if (o.hp01 != null && o.hp01 < 1.001) { const w = 40 * s, yy = y - 62 * s; c.fillStyle = 'rgba(0,0,0,0.6)'; c.fillRect(x - w / 2, yy, w, 6); c.fillStyle = o.hp01 > 0.35 ? '#7cff9a' : '#ff6a5a'; c.fillRect(x - w / 2 + 1, yy + 1, (w - 2) * Math.max(0, o.hp01), 4); }
   };
   // marteau de pierre arraché au terrain
   IA.hammer = function (c, x, y, s, ang, grow) {

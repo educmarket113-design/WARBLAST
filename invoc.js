@@ -7,6 +7,16 @@
   const rnd = (a, b) => a + Math.random() * (b - a);
   const ease = u => u * u * (3 - 2 * u);
   const G = () => WB.G;
+  // ---------- sessions d'invocation (27/11) : une série d'utilisations = une session ----------
+  // Chaque élément porte : propriétaire (f), capacité d'origine (abil), numéro de session (ses), état (sink/dead) et durée (T).
+  // Au début d'une nouvelle session, seuls les éléments de l'ancienne session de CE joueur et de CETTE capacité sont retirés.
+  WB.SES = {
+    begin(g, f, key, max, purge) {
+      const m = f.sess || (f.sess = {}), s = m[key] || (m[key] = { id: 0, n: 0 });
+      if (s.n >= max) { purge(s.id); s.id++; s.n = 0; }
+      return { id: s.id, idx: s.n++ };
+    }
+  };
   WB.INVC = {}; // lanceurs par variante : shark, golem, dragon
 
   // ---------- infrastructure ----------
@@ -43,10 +53,10 @@
 
   // ---------- GOLEM ----------
   const GS = {
-    1: { hp: 90, r: 20, scale: 0.85, speed: 195, pref: 36, reach: 56, dmg: 10, shock: [52, 5, 160], cd: 1.0 },
-    2: { hp: 320, r: 32, scale: 1.55, speed: 170, pref: 58, reach: 80, dmg: 18, shock: [75, 8, 230], cd: 1.3 },
-    4: { hp: 620, r: 40, scale: 2.1, speed: 125, pref: 140, hamR: 105, hamD: 48, cd: 3.2 },
-    5: { hp: 1000, r: 52, scale: 2.9, speed: 115, pref: 170, cd: 2.4 }
+    1: { hp: 90, r: 20, scale: 0.7, speed: 195, pref: 36, reach: 56, dmg: 10, shock: [52, 5, 160], cd: 1.0 },
+    2: { hp: 320, r: 32, scale: 1.1, speed: 170, pref: 58, reach: 80, dmg: 18, shock: [75, 8, 230], cd: 1.3 },
+    4: { hp: 620, r: 40, scale: 1.5, speed: 125, pref: 140, hamR: 105, hamD: 48, cd: 3.2 },
+    5: { hp: 1000, r: 52, scale: 2.0, speed: 115, pref: 170, cd: 2.4 }
   };
   WB.INVC.GS = GS;
 
@@ -270,7 +280,7 @@
     const a = g.inv; if (!a || !a.length) return;
     for (const e of a) { if (e.dead) continue; if (e.update && e.update(g, e, dt) === false) e.dead = true; if (!e.update) e.t += dt; }
     g.inv = a.filter(e => !e.dead);
-    if (g.inv.length > 140) g.inv.splice(0, g.inv.length - 140);
+    if (g.inv.length > 420) g.inv.splice(0, g.inv.length - 420);
   }
   const upd = WB.updateHands, drw = WB.drawHands, trails = WB.drawTrails;
   WB.updateHands = function (dt) { upd(dt); const g = WB.G; install(g); updateInv(g, dt); };
